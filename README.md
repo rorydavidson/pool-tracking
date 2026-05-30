@@ -1,26 +1,45 @@
 # Pool Tracking
 
 A self-hostable web app that tracks the chemical balance of home swimming pools,
-gives **AI-generated advice** on how to correct the water, and links your
-readings to the **real weather** on the day they were taken so you can spot what
-is driving changes in your pool.
+gives **AI-generated advice** on how to correct the water, charts your readings
+over time, and links them to the **real weather** on the day they were taken so
+you can spot what is driving changes in your pool.
 
-- **Passwordless login** — sign in with a one-time email link (magic link). Each
-  user gets their own pools, readings and device connections.
-- **Manual or automatic readings** — type in a test kit result, or pull readings
-  straight from your devices:
-  - **Aiper HydroComm** smart pool monitor (pH, ORP, EC/TDS, free chlorine, temp)
-  - **Blueriiot Blue Connect** probe (pH, ORP, temperature, salinity)
-- **On-the-fly advice from Claude** — every reading is assessed by Claude
-  (Opus 4.8), which reasons over the whole picture (pool volume, sanitiser type,
-  stabiliser, recent history *and* the weather) and returns prioritised,
-  **dosed** recommendations tailored to your pool.
-- **Full history, kept forever** — every reading is stored and shown in a
-  history table; nothing is pruned.
-- **Weather correlation** — historical daily weather (temperature, rain, UV) for
-  the pool's location is fetched from Open-Meteo and shown next to each reading,
-  and fed to Claude so it can explain weather-driven trends (e.g. hot, high-UV
-  days burning off chlorine; heavy rain dropping pH).
+## Features
+
+- **Passwordless login.** Sign in with a one-time email link (magic link). Each
+  user gets their own pools, readings and device connections. Emails are sent via
+  **Resend** or SMTP, or printed to the console in local mode.
+- **Manual or automatic readings.** Type in a test-kit result, or pull readings
+  from your devices:
+  - **Aiper HydroComm** smart pool monitor (pH, ORP, EC/TDS, temperature). Water
+    quality is read from the device's AWS IoT shadow over MQTT.
+  - **Blueriiot Blue Connect** probe (pH, ORP, temperature, salinity).
+- **Read a test strip from a photo.** Upload a photo of a dipped strip next to its
+  colour key and Claude reads each pad and pre-fills the form for you to confirm.
+  The photo is stored with the reading.
+- **Saved AI advice from Claude.** Each pool keeps one set of advice (summary,
+  per-parameter recommendations with concrete **dosing**, and an ordered
+  **next-steps** to-do list). It is generated when you add a reading or press
+  **Refresh**, not on every page view, so it stays stable and cheap.
+- **Per-pool notes.** Add free-text context ("recently shocked", "lots of leaves")
+  that is fed into the advice.
+- **Analysis page with charts.** Per-parameter trend charts (server-rendered SVG,
+  no JavaScript) with shaded target bands.
+- **Full editable pool details.** Volume, sanitiser, surface, indoor/outdoor, plus
+  **type, shape and dimensions** (length, width, average depth). A water-volume
+  estimate is calculated from the dimensions as a cross-check.
+- **Weather correlation.** Historical daily weather (temperature, rain, UV) for the
+  pool's location is fetched from Open-Meteo, shown next to each reading, and fed
+  to Claude to explain weather-driven trends.
+- **Local time.** Reading times are shown in the pool's own timezone, derived from
+  its location.
+- **Import / export / snapshot.**
+  - Export or import the full reading history as standard JSON (import de-dupes).
+  - One-click **4-hour snapshot**: a machine- and human-readable JSON of the last
+    4 hours of readings plus full pool details and unit labels, handy for feeding
+    into other tools or LLMs.
+- **Delete** individual readings, with full history kept otherwise.
 - **Runs in one Docker container.**
 
 ## Quick start (Docker)
@@ -28,21 +47,22 @@ is driving changes in your pool.
 ```bash
 cp .env.example .env
 # Edit .env: set a strong APP_SECRET. Optionally set ANTHROPIC_API_KEY (for AI
-# advice) and SMTP_* (to actually email login links).
+# advice / strip reading) and an email provider (RESEND_API_KEY or SMTP_*).
 
 docker compose up --build
 ```
 
-Open http://localhost:8000, enter your email, and you're in.
+Open http://localhost:8123, enter your email, and you're in.
 
-### Without SMTP or an API key
+### Without an email provider or API key
 
 The app is fully usable out of the box:
 
-- **No `SMTP_HOST`?** It runs in *console mode* — the login link is printed to
-  the container logs and shown on screen, and written to `/data/outbox/`.
+- **No email provider?** It runs in *console mode*: the login link is printed to
+  the container logs, shown on screen, and written to `/data/outbox/`.
 - **No `ANTHROPIC_API_KEY`?** Advice falls back to a basic in-range / out-of-range
-  check (no dosing). Set a key to get the full Claude-generated advice.
+  check (no dosing), and strip-photo reading is disabled. Set a key for the full
+  Claude features.
 
 ## Configuration
 
@@ -52,57 +72,100 @@ All configuration is via environment variables (see `.env.example`):
 |---|---|
 | `APP_SECRET` | Signs sessions & magic-link tokens, and derives the key that encrypts stored device credentials. **Set this.** |
 | `BASE_URL` | Public URL used to build login links (e.g. `https://pool.example.com`). |
-| `ANTHROPIC_API_KEY` | Enables Claude-generated advice. Without it, a basic fallback is used. |
+| `ANTHROPIC_API_KEY` | Enables Claude advice and test-strip reading. Without it, a basic fallback is used. |
 | `ADVICE_MODEL` / `ADVICE_EFFORT` | Claude model (default `claude-opus-4-8`) and thinking effort (`low`/`medium`/`high`/`max`). |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, `EMAIL_FROM` | Outbound email for magic links. Leave `SMTP_HOST` blank for console mode. |
+| `RESEND_API_KEY` | Send magic-link emails via [Resend](https://resend.com). Takes priority over SMTP. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS` | SMTP delivery, used when `RESEND_API_KEY` is empty. |
+| `EMAIL_FROM` | From address for login emails. Must be on a domain you've verified with your provider. |
 | `MAGIC_LINK_TTL_MINUTES` / `SESSION_TTL_DAYS` | Login link and session lifetimes. |
-| `DATA_DIR` | Where the SQLite DB and dev outbox live (default `/data`, a Docker volume). |
+| `DATA_DIR` | Where the SQLite DB, uploaded photos and dev outbox live (default `/data`, a Docker volume). |
+
+Email provider is chosen automatically: **Resend** if `RESEND_API_KEY` is set,
+else **SMTP** if `SMTP_HOST` is set, else **console**.
 
 ## How it works
 
 ```
 app/
   main.py            FastAPI app: sessions, static, startup, /healthz
-  config.py          Env-based settings
+  config.py          Env-based settings (data/uploads dirs, email provider)
   database.py        SQLAlchemy engine + lightweight column migration
-  models.py          User, MagicToken, Pool, Reading, ProviderCredential, WeatherDay
+  models.py          User, MagicToken, Pool, Reading, PoolAdvice,
+                     ProviderCredential, WeatherDay + pool volume estimator
   security.py        Token hashing + Fernet encryption for device credentials
-  email_utils.py     Magic-link delivery (SMTP or console)
+  email_utils.py     Magic-link delivery (Resend / SMTP / console)
   auth.py            Magic-link issue/consume + session helpers
   chemistry.py       Shared types, target ranges, deterministic fallback
   advice.py          Claude-powered advice (structured output, prompt caching)
-  weather.py         Open-Meteo geocoding + cached historical daily weather
+  vision.py          Claude vision: read a test strip from a photo
+  charts.py          Dependency-free inline-SVG trend charts
+  weather.py         Open-Meteo geocoding, cached daily weather, timezone lookup
+  templating.py      Jinja env + local-time formatting helper
   integrations/      Device adapters behind a common interface
     base.py            PoolDevice interface + normalised DeviceMeasurement
-    aiper.py           Aiper HydroComm cloud REST adapter
+    aiper.py           Aiper cloud (encrypted REST login + device list)
+    aiper_shadow.py    Aiper water quality via AWS IoT MQTT shadow (SigV4 WS)
     blueriiot.py       Blueriiot Blue Connect adapter (AWS SigV4)
-  routes/            Web routes (auth, pools/readings/advice, integrations)
-  templates/, static/  Server-rendered UI
+  routes/            Web routes (auth, pools/readings/advice/analysis,
+                     snapshot, import/export, integrations)
+  templates/, static/  Server-rendered UI, logo and stylesheet
 ```
 
 ### Advice
 
-`advice.py` sends the pool spec + recent reading history (with each day's
-weather) to Claude using the Messages API with **structured outputs** (so the
-result is a typed list of recommendations) and **prompt caching** on the stable
-expert system prompt. If the API key is missing or a call fails, it falls back
-to `chemistry.fallback_assessment` so the page always renders.
+`advice.py` sends the pool spec (including dimensions and the calculated volume
+estimate), recent reading history with each day's weather, and your notes to
+Claude using the Messages API with **structured outputs** and **prompt caching**
+on the stable expert system prompt. The result is stored in `pool_advice` and
+shown on the pool page; it is only regenerated when you add a reading or press
+**Refresh**. If the API key is missing or a call fails, it falls back to
+`chemistry.fallback_assessment` so the page always renders.
+
+### Test-strip photos
+
+`vision.py` sends an uploaded strip photo to Claude, which compares each pad to
+the colour key in the same image and returns numeric values. These pre-fill the
+reading form for you to confirm before saving. Anything it can't read confidently
+is left blank rather than guessed. Uploads are validated (type and size) and
+served back through an ownership-checked route.
+
+### Analysis and charts
+
+The analysis page renders one trend chart per parameter as inline SVG (no
+JavaScript, no CDN), with a shaded target band derived from the published ranges
+(the free-chlorine band adapts to stabiliser level and pool type). Times use the
+pool's local timezone.
+
+### Import, export and snapshot
+
+- **Export / import** the full history as JSON. Import accepts the export envelope
+  or a bare array and de-dupes on `(source, external_id, taken_at)`, so
+  re-importing is idempotent. Images are not included.
+- **Snapshot (4h)** emits a JSON document describing the pool (type, shape,
+  dimensions, volume and estimate, sanitiser, surface, location, timezone) plus
+  every reading from the last 4 hours, with UTC and local timestamps and a `units`
+  map. It is designed to be dropped into other tools or LLMs.
 
 ### Device integrations
 
-Neither Aiper nor Blueriiot publishes an official API, so each adapter is
-isolated behind the `PoolDevice` interface and normalises whatever the vendor
-returns into the app's canonical units (ppm, mV, °C). Credentials you enter are
-**encrypted at rest** (Fernet, key derived from `APP_SECRET`) and only used to
-fetch your own measurements. Endpoints are based on community
-reverse-engineering and may need adjusting if a vendor changes their API.
+Neither Aiper nor Blueriiot publishes an official API, so each adapter is isolated
+behind the `PoolDevice` interface and normalises whatever the vendor returns into
+the app's canonical units (ppm, mV, °C). Credentials you enter are **encrypted at
+rest** (Fernet, key derived from `APP_SECRET`) and only used to fetch your own
+measurements.
 
-### Weather
+For Aiper, login and device discovery use the vendor's encrypted REST API
+(region-selectable: Europe, Americas, Asia), but the HydroComm reports water
+quality only over MQTT, so `aiper_shadow.py` connects to AWS IoT over a
+SigV4-signed WebSocket and reads the device shadow. Endpoints are based on
+community reverse-engineering and may need adjusting if a vendor changes their API.
 
-When a pool has a location, the daily weather for each reading date is fetched
-from [Open-Meteo](https://open-meteo.com) (no API key) and cached in the
-`weather_days` table. It's shown in the UI and passed to Claude to correlate
-chemistry changes with conditions.
+### Weather and timezone
+
+When a pool has a location, the daily weather for each reading date is fetched from
+[Open-Meteo](https://open-meteo.com) (no API key) and cached in the `weather_days`
+table. The pool's IANA timezone is also looked up from its coordinates and stored,
+so reading times display in local time.
 
 ## Development
 
@@ -114,9 +177,13 @@ uvicorn app.main:app --reload      # http://localhost:8000
 pytest                              # run the test suite
 ```
 
+The schema evolves through a lightweight migration in `database.py`
+(`_add_missing_columns`), which adds any missing columns on startup. There is no
+separate migration tool.
+
 ## Notes & disclaimer
 
-Dosing advice is an estimate to guide a non-expert owner — always add chemicals
+Dosing advice is an estimate to guide a non-expert owner: always add chemicals
 gradually with the pump running, never mix chemicals, and re-test before adding
-more. This app is not a substitute for professional advice on a pool you're
-unsure about.
+more. This app is not a substitute for professional advice on a pool you're unsure
+about.
