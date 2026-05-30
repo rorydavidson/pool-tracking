@@ -65,6 +65,9 @@ h2 { font-size: 1.12rem; margin: 0 0 0.5rem; }
   box-shadow: var(--shadow);
 }
 .card.narrow { max-width: 460px; margin: 2rem auto; }
+/* In-app forms: left-aligned under their page-head, like every other page. */
+.card.form-narrow { max-width: 580px; }
+.connect-form { max-width: 580px; }
 .card.empty { text-align: center; }
 .card.empty .primary { margin: 0.75rem 0; }
 
@@ -92,10 +95,11 @@ h2 { font-size: 1.12rem; margin: 0 0 0.5rem; }
 
 label { display: block; font-weight: 600; margin: 0.9rem 0 0.3rem; font-size: 0.9rem; }
 label.checkbox { font-weight: 400; display: flex; align-items: center; gap: 0.5rem; }
-input, select, textarea {
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   width: 100%; padding: 0.55rem 0.65rem; border: 1px solid var(--line);
   border-radius: 8px; font-size: 1rem; font-family: inherit; background: #fff;
 }
+input[type="checkbox"], input[type="radio"] { width: auto; flex: 0 0 auto; margin: 0; }
 textarea { resize: vertical; }
 .row { display: flex; gap: 0.5rem; }
 .row input { flex: 2; } .row select { flex: 1; }

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Add a pool — {{ app_name }}{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <h1>Add a pool</h1>
+<div class="page-head"><h1>Add a pool</h1></div>
+<div class="card form-narrow">
   <p class="muted">The pool's specs let us tailor advice and dosing to your water volume.</p>
   <form method="post" action="/pools/new">
     <label for="name">Pool name</label>

@@ -6,7 +6,7 @@
   <a class="secondary" href="/pools/{{ pool.id }}">← Back</a>
 </div>
 
-<div class="card narrow">
+<div class="card form-narrow">
   <form method="post" action="/pools/{{ pool.id }}/edit" enctype="multipart/form-data">
     <label for="name">Pool name</label>
     <input type="text" id="name" name="name" value="{{ pool.name }}" required>
