@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Local runtime data: SQLite db, dev email outbox
+/data/
+*.sqlite3
+*.db
+
+# Secrets
+.env
+
+# Generated design preview images
+screenshots/

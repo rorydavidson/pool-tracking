@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Sign in — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Sign in</h1>
+  <p class="muted">Enter your email and we'll send you a one-time login link. No password needed.</p>
+  {% if error %}<p class="alert critical">{{ error }}</p>{% endif %}
+  <form method="post" action="/auth/request">
+    <label for="email">Email address</label>
+    <input type="email" id="email" name="email" placeholder="you@example.com" required autofocus>
+    <button type="submit" class="primary">Send login link</button>
+  </form>
+</div>
+{% endblock %}

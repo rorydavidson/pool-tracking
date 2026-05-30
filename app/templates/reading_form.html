@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Add reading — {{ pool.name }}{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Add a water test</h1>
+  <p class="muted">Enter whatever you've measured for <strong>{{ pool.name }}</strong>. Leave the rest blank.</p>
+  <form method="post" action="/pools/{{ pool.id }}/readings/new">
+    {% for field, label in fields %}
+      <label for="{{ field }}">{{ label }}</label>
+      <input type="number" step="any" id="{{ field }}" name="{{ field }}">
+    {% endfor %}
+    <button type="submit" class="primary">Save reading &amp; get advice</button>
+  </form>
+</div>
+{% endblock %}
