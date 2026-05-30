@@ -148,7 +148,16 @@
   </section>
 
   <section class="card">
-    <h2>History</h2>
+    <div class="section-head">
+      <h2>History</h2>
+      <div class="history-tools">
+        <a class="secondary small" href="/pools/{{ pool.id }}/export">⬇ Export JSON</a>
+        <form method="post" action="/pools/{{ pool.id }}/import" enctype="multipart/form-data" class="import-form">
+          <input type="file" name="file" accept="application/json,.json" required>
+          <button type="submit" class="secondary small">⬆ Import</button>
+        </form>
+      </div>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>

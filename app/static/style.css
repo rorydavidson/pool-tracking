@@ -183,6 +183,12 @@ th { color: var(--muted); font-weight: 600; }
 .alert.critical { background: #fff0f0; color: var(--critical); }
 .alert.inline { display: inline-block; padding: 0.1rem 0.5rem; }
 
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.section-head h2 { margin: 0; }
+.history-tools { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.import-form { display: flex; align-items: center; gap: 0.4rem; margin: 0; }
+.import-form input[type="file"] { width: auto; max-width: 180px; font-size: 0.8rem; padding: 0.25rem; }
+
 .row-action { text-align: center; padding: 0.2rem 0.4rem; }
 .row-action form { margin: 0; }
 .icon-delete {
