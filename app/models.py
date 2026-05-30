@@ -149,6 +149,8 @@ class Pool(Base):
     # IANA timezone (e.g. "Europe/London") derived from the location, for
     # displaying reading times in the pool's local time.
     timezone: Mapped[str | None] = mapped_column(String(64))
+    # Filename (under the uploads dir) of an optional cover photo.
+    image_path: Mapped[str | None] = mapped_column(String(255))
     # Free-text context the owner can add (e.g. "recently shocked", "near oak
     # trees"). Passed to the advice generator as extra context.
     notes: Mapped[str | None] = mapped_column(Text)

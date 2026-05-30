@@ -1,28 +1,29 @@
 {% extends "base.html" %}
 {% block title %}{{ pool.name }} — {{ app_name }}{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
+<section class="hero {{ 'has-photo' if pool.image_path else 'no-photo' }}"
+  {% if pool.image_path %}style="background-image:linear-gradient(to top, rgba(8,40,48,0.82) 0%, rgba(8,40,48,0.15) 55%, rgba(8,40,48,0.05) 100%), url('/pools/{{ pool.id }}/image')"{% endif %}>
+  <div class="hero-body">
     <h1>{{ pool.name }}</h1>
-    <p class="muted">
-      {{ "%.0f"|format(pool.volume_litres) }} L
-      ({{ "%.0f"|format(pool.volume_litres / 3.78541) }} US gal) ·
-      {{ pool.sanitizer.value }} · {{ pool.surface.value }} ·
-      {{ "indoor" if pool.indoor else "outdoor" }}
-      {% if pool.pool_type %} · {{ pool.pool_type.value.replace("_", "-") }}{% endif %}
-      {% if pool.shape %} · {{ pool.shape.value }}{% endif %}
-      {% if pool.length_m and pool.avg_depth_m %} ·
-        {{ "%g"|format(pool.length_m) }}{% if pool.width_m %}×{{ "%g"|format(pool.width_m) }}{% endif %}m,
-        {{ "%g"|format(pool.avg_depth_m) }}m deep{% endif %}
-      {% if pool.location_name %} · 📍 {{ pool.location_name }}{% endif %}
-    </p>
+    <div class="chips">
+      <span class="chip">{{ "%.0f"|format(pool.volume_litres) }} L</span>
+      <span class="chip">{{ pool.sanitizer.value }}</span>
+      <span class="chip">{{ pool.surface.value }}</span>
+      <span class="chip">{{ "indoor" if pool.indoor else "outdoor" }}</span>
+      {% if pool.pool_type %}<span class="chip">{{ pool.pool_type.value.replace("_", "-") }}</span>{% endif %}
+      {% if pool.shape %}<span class="chip">{{ pool.shape.value }}</span>{% endif %}
+      {% if pool.length_m and pool.avg_depth_m %}
+        <span class="chip">{{ "%g"|format(pool.length_m) }}{% if pool.width_m %}×{{ "%g"|format(pool.width_m) }}{% endif %}m · {{ "%g"|format(pool.avg_depth_m) }}m deep</span>
+      {% endif %}
+      {% if pool.location_name %}<span class="chip">📍 {{ pool.location_name }}</span>{% endif %}
+    </div>
   </div>
-  <div class="head-actions">
-    <a class="secondary" href="/pools/{{ pool.id }}/edit">⚙ Edit details</a>
-    {% if readings %}<a class="secondary" href="/pools/{{ pool.id }}/analysis">📈 Analysis</a>{% endif %}
-    <a class="primary" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
+  <div class="hero-actions">
+    <a class="btn-ghost" href="/pools/{{ pool.id }}/edit">⚙ Edit</a>
+    {% if readings %}<a class="btn-ghost" href="/pools/{{ pool.id }}/analysis">📈 Analysis</a>{% endif %}
+    <a class="btn-bright" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
   </div>
-</div>
+</section>
 
 {% if flash %}<p class="alert low">{{ flash }}</p>{% endif %}
 {% if error %}<p class="alert critical">{{ error }}</p>{% endif %}
@@ -36,6 +37,7 @@
   </div>
 {% else %}
 
+  <div class="detail-grid">
   {% if assessment %}
   <section class="card assessment">
     <div class="assessment-head">
@@ -130,6 +132,7 @@
       <p class="muted small">📍 Add a location to this pool to correlate readings with the weather.</p>
     {% endif %}
   </section>
+  </div>{# /detail-grid #}
 
   <section class="card">
     <div class="section-head">

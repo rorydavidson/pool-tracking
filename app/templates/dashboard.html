@@ -9,14 +9,20 @@
 {% if pools %}
   <div class="grid">
     {% for pool in pools %}
-      <a class="card pool-card" href="/pools/{{ pool.id }}">
-        <h2>{{ pool.name }}</h2>
-        <p class="muted">
-          {{ "%.0f"|format(pool.volume_litres) }} L ·
-          {{ pool.sanitizer.value }} ·
-          {{ "indoor" if pool.indoor else "outdoor" }}
-        </p>
-        <p class="muted small">{{ pool.readings|length }} reading(s)</p>
+      <a class="card pool-card {{ 'has-thumb' if pool.image_path else '' }}" href="/pools/{{ pool.id }}">
+        <div class="pool-thumb"
+          {% if pool.image_path %}style="background-image:url('/pools/{{ pool.id }}/image')"{% endif %}>
+          {% if not pool.image_path %}<span class="pool-thumb-drop">💧</span>{% endif %}
+        </div>
+        <div class="pool-card-body">
+          <h2>{{ pool.name }}</h2>
+          <p class="muted">
+            {{ "%.0f"|format(pool.volume_litres) }} L ·
+            {{ pool.sanitizer.value }} ·
+            {{ "indoor" if pool.indoor else "outdoor" }}
+          </p>
+          <p class="muted small">{{ pool.readings|length }} reading(s)</p>
+        </div>
       </a>
     {% endfor %}
   </div>

@@ -902,7 +902,7 @@ def edit_pool_form(
 
 
 @router.post("/pools/{pool_id}/edit")
-def update_pool(
+async def update_pool(
     pool_id: int,
     name: str = Form(...),
     volume: float = Form(...),
@@ -917,6 +917,8 @@ def update_pool(
     location: str = Form(""),
     latitude: str = Form(""),
     longitude: str = Form(""),
+    photo: UploadFile | None = File(None),
+    remove_photo: bool = Form(False),
     user=Depends(auth.current_user),
     db: Session = Depends(get_db),
 ):
@@ -947,8 +949,52 @@ def update_pool(
             pool.location_name = place
             pool.timezone = _timezone_for(lat, lon)
 
+    error = _apply_pool_photo(pool, photo, remove_photo)
+    if error:
+        return RedirectResponse(f"/pools/{pool.id}?error={error}", status_code=303)
+
     db.commit()
     return RedirectResponse(f"/pools/{pool.id}?flash=Details updated", status_code=303)
+
+
+def _apply_pool_photo(pool: Pool, photo: UploadFile | None, remove: bool) -> str | None:
+    """Save/remove a pool cover photo. Returns an error message, or None on success."""
+    raw = None
+    media_type = (photo.content_type or "").lower() if photo else ""
+    # Starlette gives an empty UploadFile (no filename) when the field is left blank.
+    has_upload = bool(photo and photo.filename)
+
+    old = pool.image_path
+    if remove or has_upload:
+        if old:
+            old_path = _safe_upload_path(old)
+            if old_path is not None:
+                old_path.unlink(missing_ok=True)
+            pool.image_path = None
+
+    if has_upload:
+        if media_type not in SUPPORTED_IMAGE_TYPES:
+            return "Pool photo must be a JPEG, PNG, WebP or HEIC image."
+        raw = photo.file.read()
+        if len(raw) > MAX_IMAGE_BYTES:
+            return "Pool photo is too large (max 8 MB)."
+        pool.image_path = _save_upload(photo, raw)
+    return None
+
+
+@router.get("/pools/{pool_id}/image")
+def pool_image(
+    pool_id: int, user=Depends(auth.current_user), db: Session = Depends(get_db)
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None or not pool.image_path:
+        return RedirectResponse("/", status_code=303)
+    path = _safe_upload_path(pool.image_path)
+    if path is None:
+        return RedirectResponse(f"/pools/{pool.id}", status_code=303)
+    return FileResponse(path)
 
 
 @router.post("/pools/{pool_id}/advice/refresh")

@@ -69,12 +69,23 @@ h2 { font-size: 1.12rem; margin: 0 0 0.5rem; }
 .card.empty .primary { margin: 0.75rem 0; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
-.pool-card { display: block; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
+.pool-card {
+  display: block; padding: 0; overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
 .pool-card:hover {
   border-color: var(--accent); text-decoration: none;
-  transform: translateY(-2px); box-shadow: 0 6px 22px rgba(11, 114, 133, 0.12);
+  transform: translateY(-2px); box-shadow: 0 8px 26px rgba(11, 114, 133, 0.15);
 }
-.pool-card h2 { color: var(--ink); }
+.pool-thumb {
+  height: 124px; background-size: cover; background-position: center;
+  background-color: #dcebee; display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid var(--line);
+}
+.pool-card.has-thumb .pool-thumb { border-bottom: none; }
+.pool-thumb-drop { font-size: 2.2rem; opacity: 0.45; }
+.pool-card-body { padding: 0.9rem 1.1rem; }
+.pool-card h2 { color: var(--ink); margin: 0 0 0.3rem; }
 
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
@@ -210,6 +221,57 @@ th { color: var(--muted); font-weight: 600; }
 
 .weather-line { margin-top: 0.75rem; color: var(--accent-dark); font-size: 0.9rem; }
 .weather-cell { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+
+/* --- Pool hero --- */
+.hero {
+  position: relative; border-radius: var(--radius); overflow: hidden;
+  padding: 1.4rem 1.5rem; margin-bottom: 1.25rem; min-height: 210px;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  background-size: cover; background-position: center; box-shadow: var(--shadow);
+}
+.hero.no-photo {
+  background:
+    radial-gradient(120% 140% at 85% -20%, rgba(255,255,255,0.18), rgba(255,255,255,0) 50%),
+    linear-gradient(120deg, var(--accent-dark), var(--accent));
+}
+.hero h1 {
+  color: #fff; font-size: 1.85rem; margin: 0 0 0.55rem;
+  text-shadow: 0 1px 10px rgba(0,0,0,0.35);
+}
+.hero-body { position: relative; z-index: 1; }
+.hero-actions {
+  position: absolute; top: 1rem; right: 1rem; z-index: 2;
+  display: flex; gap: 0.5rem; flex-wrap: wrap;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chip {
+  background: rgba(255,255,255,0.18); color: #fff;
+  border: 1px solid rgba(255,255,255,0.3); -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px); padding: 0.2rem 0.65rem; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 500;
+}
+.btn-ghost, .btn-bright {
+  padding: 0.45rem 0.85rem; border-radius: 9px; font-size: 0.85rem; font-weight: 600;
+}
+.btn-ghost {
+  background: rgba(255,255,255,0.16); color: #fff;
+  border: 1px solid rgba(255,255,255,0.32); -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.btn-ghost:hover { background: rgba(255,255,255,0.3); text-decoration: none; }
+.btn-bright { background: #fff; color: var(--accent-dark); font-weight: 700; }
+.btn-bright:hover { background: #eef7f9; text-decoration: none; }
+
+.detail-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem; align-items: start;
+}
+.detail-grid .card { margin-bottom: 0; }
+
+.photo-preview {
+  display: block; max-width: 100%; max-height: 180px;
+  border-radius: 8px; border: 1px solid var(--line); margin: 0.3rem 0 0.2rem;
+}
 
 /* --- Analysis charts --- */
 .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
