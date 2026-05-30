@@ -723,21 +723,6 @@ def export_snapshot(
                 item[field] = val
         snapshot_readings.append(item)
 
-    advice = None
-    if pool.advice is not None:
-        try:
-            assessment = deserialise_assessment(pool.advice.payload)
-            advice = {
-                "summary": assessment.summary,
-                "overall": assessment.overall.value,
-                "generated_at_utc": pool.advice.generated_at.replace(
-                    tzinfo=timezone.utc
-                ).isoformat() if pool.advice.generated_at.tzinfo is None
-                else pool.advice.generated_at.isoformat(),
-            }
-        except Exception:  # noqa: BLE001 - advice is supplementary
-            advice = None
-
     payload = {
         "kind": "pool-tracking.snapshot",
         "version": 1,
@@ -753,7 +738,6 @@ def export_snapshot(
         "pool": _pool_spec_dict(pool),
         "reading_count": len(snapshot_readings),
         "readings": snapshot_readings,
-        "latest_advice": advice,
     }
 
     stamp = (_local_iso(now, pool.timezone) or now.isoformat())[:16].replace(":", "")
