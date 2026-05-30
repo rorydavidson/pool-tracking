@@ -1,9 +1,9 @@
 services:
-  app:
+  pool-app:
     build: .
     image: pool-tracking:latest
     ports:
-      - "8000:8000"
+      - "8123:8000"
     env_file:
       - .env
     environment:
