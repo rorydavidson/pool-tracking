@@ -49,7 +49,7 @@ a:hover { text-decoration: underline; }
 .topbar nav a:hover { text-decoration: underline; }
 .topbar .who { color: #cfe9ee; font-size: 0.82rem; }
 
-.container { max-width: 900px; margin: 1.75rem auto; padding: 0 1rem; }
+.container { max-width: 1240px; margin: 1.75rem auto; padding: 0 1.5rem; }
 
 .page-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -263,8 +263,11 @@ th { color: var(--muted); font-weight: 600; }
 .btn-bright:hover { background: #eef7f9; text-decoration: none; }
 
 .detail-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.25rem; align-items: start;
+  display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: start;
+}
+/* Advice gets the lion's share; latest reading sits in a comfortable sidebar. */
+@media (min-width: 860px) {
+  .detail-grid { grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); }
 }
 .detail-grid .card { margin-bottom: 0; }
 
