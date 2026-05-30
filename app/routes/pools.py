@@ -266,6 +266,10 @@ def pool_detail(
     assessment = deserialise_assessment(pool.advice.payload) if pool.advice else None
     advice_generated_at = pool.advice.generated_at if pool.advice else None
 
+    # Per-metric in/out-of-range status for the latest reading, so the dashboard
+    # tiles can be colour-coded.
+    metric_status = _metric_status(pool, list(readings))
+
     return templates.TemplateResponse(
         request,
         "pool_detail.html",
@@ -275,11 +279,29 @@ def pool_detail(
             "latest": readings[0] if readings else None,
             "assessment": assessment,
             "advice_generated_at": advice_generated_at,
+            "metric_status": metric_status,
             "weather": weather_by_date,
             "flash": request.query_params.get("flash"),
             "error": request.query_params.get("error"),
         },
     )
+
+
+def _metric_status(pool: Pool, readings: list[Reading]) -> dict[str, str]:
+    """Map each measured field of the latest reading to 'ok' or 'out' vs target."""
+    if not readings:
+        return {}
+    latest = readings[0]
+    latest_cya = next((r.cyanuric_acid for r in readings if r.cyanuric_acid is not None), None)
+    status: dict[str, str] = {}
+    for attr in ("ph", "free_chlorine", "total_alkalinity", "cyanuric_acid",
+                 "calcium_hardness", "salt", "orp"):
+        value = getattr(latest, attr)
+        target = _target_for(attr, pool, latest_cya)
+        if value is None or target is None:
+            continue
+        status[attr] = "ok" if target[0] <= value <= target[1] else "out"
+    return status
 
 
 def _target_for(attr: str, pool: Pool, latest_cya: float | None):
