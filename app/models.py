@@ -251,6 +251,9 @@ class ProviderCredential(Base):
     auto_sync_pool_id: Mapped[int | None] = mapped_column(
         ForeignKey("pools.id", ondelete="SET NULL")
     )
+    # Per-device sync frequency in hours. Null means use the global default
+    # (AUTO_SYNC_INTERVAL_HOURS).
+    auto_sync_interval_hours: Mapped[float | None] = mapped_column(Float)
 
     user: Mapped["User"] = relationship(back_populates="credentials")
     auto_sync_pool: Mapped["Pool | None"] = relationship()

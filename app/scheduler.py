@@ -31,9 +31,13 @@ _STARTUP_DELAY_SECONDS = 45  # let the app settle before the first pass
 _task: asyncio.Task | None = None
 
 
-def _due_credential_ids(interval_hours: float) -> list[int]:
-    """Return ids of enabled credentials due for a sync (own short-lived session)."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=interval_hours)
+def _due_credential_ids(default_interval_hours: float) -> list[int]:
+    """Return ids of enabled credentials due for a sync (own short-lived session).
+
+    Each device's cadence is its own ``auto_sync_interval_hours`` when set,
+    otherwise the global default.
+    """
+    now = datetime.now(timezone.utc)
     db = SessionLocal()
     try:
         rows = db.scalars(
@@ -44,6 +48,10 @@ def _due_credential_ids(interval_hours: float) -> list[int]:
         ).all()
         due = []
         for cred in rows:
+            interval = cred.auto_sync_interval_hours or default_interval_hours
+            if interval <= 0:
+                continue
+            cutoff = now - timedelta(hours=interval)
             last = cred.last_sync_at
             if last is not None and last.tzinfo is None:
                 last = last.replace(tzinfo=timezone.utc)

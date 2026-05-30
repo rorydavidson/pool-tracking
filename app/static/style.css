@@ -106,6 +106,8 @@ textarea { resize: vertical; }
 .autosync-form { align-items: center; }
 .autosync-form .checkbox { white-space: nowrap; margin: 0; flex: 0 0 auto; }
 .autosync-form button { margin-top: 0; }
+.autosync-form select[name="interval_hours"] { min-width: 120px; }
+.autosync-into { color: var(--muted); font-size: 0.9rem; }
 
 button { cursor: pointer; font-family: inherit; }
 .primary {

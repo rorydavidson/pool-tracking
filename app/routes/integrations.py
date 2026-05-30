@@ -138,6 +138,7 @@ def set_autosync(
     provider: str,
     enabled: bool = Form(False),
     pool_id: str = Form(""),
+    interval_hours: str = Form(""),
     user=Depends(auth.current_user),
     db: Session = Depends(get_db),
 ):
@@ -162,11 +163,22 @@ def set_autosync(
             "/integrations?error=Choose a pool to auto-sync into", status_code=303
         )
 
+    # Blank = use the global default cadence; otherwise store the chosen hours.
+    interval = None
+    if interval_hours.strip():
+        try:
+            value = float(interval_hours)
+            interval = value if value > 0 else None
+        except ValueError:
+            interval = None
+
     cred.auto_sync_enabled = enabled
     cred.auto_sync_pool_id = target.id if target else None
+    cred.auto_sync_interval_hours = interval
     db.commit()
-    msg = (
-        f"Auto-sync on for {prov.value} into {target.name}"
-        if enabled else f"Auto-sync off for {prov.value}"
-    )
+    if enabled:
+        effective = interval or get_settings().auto_sync_interval_hours
+        msg = f"Auto-sync on for {prov.value} into {target.name} every {effective:g}h"
+    else:
+        msg = f"Auto-sync off for {prov.value}"
     return RedirectResponse(f"/integrations?flash={msg}", status_code=303)

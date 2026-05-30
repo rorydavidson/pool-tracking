@@ -15,9 +15,10 @@ you can spot what is driving changes in your pool.
   - **Aiper HydroComm** smart pool monitor (pH, ORP, EC/TDS, temperature). Water
     quality is read from the device's AWS IoT shadow over MQTT.
   - **Blueriiot Blue Connect** probe (pH, ORP, temperature, salinity).
-- **Scheduled device syncing.** Enable auto-sync per device (with a target pool)
-  on the Devices page and a background scheduler pulls fresh readings every few
-  hours (`AUTO_SYNC_INTERVAL_HOURS`, default 1). Manual sync still works any time.
+- **Scheduled device syncing.** Enable auto-sync per device (with a target pool
+  and a per-device frequency) on the Devices page and a background scheduler pulls
+  fresh readings on that cadence (falling back to `AUTO_SYNC_INTERVAL_HOURS`,
+  default 1). Manual sync still works any time.
 - **Read a test strip from a photo.** Upload a photo of a dipped strip next to its
   colour key and Claude reads each pad and pre-fills the form for you to confirm.
   The photo is stored with the reading.

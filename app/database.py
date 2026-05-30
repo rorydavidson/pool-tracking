@@ -57,6 +57,7 @@ _LIGHTWEIGHT_MIGRATIONS = {
     "provider_credentials": {
         "auto_sync_enabled": "BOOLEAN DEFAULT 0",
         "auto_sync_pool_id": "INTEGER",
+        "auto_sync_interval_hours": "FLOAT",
     },
 }
 

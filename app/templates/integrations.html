@@ -30,7 +30,8 @@
         {% if cred.last_sync_error %}<span class="alert critical inline">Last error: {{ cred.last_sync_error }}</span>{% endif %}
       </p>
       {% if cred.auto_sync_enabled and cred.auto_sync_pool %}
-        <p class="muted small">⏱ Auto-syncing every {{ "%g"|format(auto_sync_hours) }}h into
+        {% set effective = cred.auto_sync_interval_hours or auto_sync_hours %}
+        <p class="muted small">⏱ Auto-syncing every {{ "%g"|format(effective) }}h into
           <strong>{{ cred.auto_sync_pool.name }}</strong> (manual sync still available).</p>
       {% endif %}
       {% if pools %}
@@ -45,8 +46,15 @@
         <form method="post" action="/integrations/{{ provider.value }}/autosync" class="inline-form autosync-form">
           <label class="checkbox">
             <input type="checkbox" name="enabled" value="true" {{ 'checked' if cred.auto_sync_enabled }}>
-            Auto-sync every {{ "%g"|format(auto_sync_hours) }}h into
+            Auto-sync every
           </label>
+          <select name="interval_hours" aria-label="Sync frequency">
+            <option value="">default ({{ "%g"|format(auto_sync_hours) }}h)</option>
+            {% for h in [1, 2, 3, 6, 12, 24] %}
+              <option value="{{ h }}" {{ 'selected' if cred.auto_sync_interval_hours == h }}>{{ h }}h</option>
+            {% endfor %}
+          </select>
+          <span class="autosync-into">into</span>
           <select name="pool_id" aria-label="Auto-sync pool">
             <option value="">— choose pool —</option>
             {% for pool in pools %}
