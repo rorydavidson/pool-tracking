@@ -44,7 +44,7 @@ def _startup() -> None:
     logging.getLogger("pool_tracking").info(
         "Started Pool Tracking %s (email=%s, advice=%s)",
         __version__,
-        "smtp" if settings.email_enabled else "console",
+        settings.email_provider,
         "claude" if settings.anthropic_api_key else "fallback",
     )
 

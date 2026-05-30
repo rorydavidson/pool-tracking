@@ -1,6 +1,8 @@
 """Login / logout routes (magic-link email auth)."""
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -23,8 +25,18 @@ def login_form(request: Request, user=Depends(auth.current_user)):
 @router.post("/auth/request", response_class=HTMLResponse)
 def request_link(request: Request, email: str = Form(...), db: Session = Depends(get_db)):
     settings = get_settings()
-    link = auth.issue_magic_link(db, email)
-    # In console mode (no SMTP), surface the link so the app is usable without mail.
+    try:
+        link = auth.issue_magic_link(db, email)
+    except RuntimeError:
+        # Email provider (e.g. Resend) failed; don't 500 — show a friendly error.
+        logging.getLogger("pool_tracking.auth").exception("Failed to send magic link")
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": "We couldn't send the login email just now. Please try again shortly."},
+            status_code=502,
+        )
+    # In console mode (no provider), surface the link so the app is usable without mail.
     dev_link = None if settings.email_enabled else link
     return templates.TemplateResponse(
         request,

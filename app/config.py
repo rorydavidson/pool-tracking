@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     advice_model: str = "claude-opus-4-8"
     advice_effort: str = "medium"  # low | medium | high | max
 
-    # Email / magic link
+    # Email / magic link.
+    # Delivery provider is chosen automatically: Resend if an API key is set,
+    # else SMTP if a host is set, else console (link logged + saved to outbox).
+    resend_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
@@ -49,9 +52,18 @@ class Settings(BaseSettings):
         return self.data_dir / "uploads"
 
     @property
+    def email_provider(self) -> str:
+        """Which delivery path is active: 'resend', 'smtp', or 'console'."""
+        if self.resend_api_key:
+            return "resend"
+        if self.smtp_host:
+            return "smtp"
+        return "console"
+
+    @property
     def email_enabled(self) -> bool:
-        """True when a real SMTP server is configured."""
-        return bool(self.smtp_host)
+        """True when a real email provider (Resend or SMTP) is configured."""
+        return self.email_provider != "console"
 
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
