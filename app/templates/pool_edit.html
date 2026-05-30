@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ pool.name }} — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Edit pool details</h1>
+  <a class="secondary" href="/pools/{{ pool.id }}">← Back</a>
+</div>
+
+<div class="card narrow">
+  <form method="post" action="/pools/{{ pool.id }}/edit">
+    <label for="name">Pool name</label>
+    <input type="text" id="name" name="name" value="{{ pool.name }}" required>
+
+    <label for="volume">Water volume (litres)</label>
+    <input type="number" step="any" min="0" id="volume" name="volume" value="{{ '%g'|format(pool.volume_litres) }}" required>
+    {% set est = volume_estimate %}
+    {% if est %}
+      <p class="muted small">Estimated from your dimensions: <strong>{{ "{:,.0f}".format(est) }} L</strong>
+        ({{ "{:,.0f}".format(est / 3.78541) }} US gal).
+        <button type="button" class="linklike" onclick="document.getElementById('volume').value={{ '%g'|format(est) }}">Use this</button>
+      </p>
+    {% endif %}
+
+    <label for="sanitizer">Sanitiser</label>
+    <select id="sanitizer" name="sanitizer">
+      {% for s in sanitizers %}<option value="{{ s.value }}" {{ 'selected' if pool.sanitizer == s }}>{{ s.value }}</option>{% endfor %}
+    </select>
+
+    <label for="surface">Surface</label>
+    <select id="surface" name="surface">
+      {% for s in surfaces %}<option value="{{ s.value }}" {{ 'selected' if pool.surface == s }}>{{ s.value }}</option>{% endfor %}
+    </select>
+
+    <label class="checkbox"><input type="checkbox" name="indoor" value="true" {{ 'checked' if pool.indoor }}> Indoor pool</label>
+
+    <label for="pool_type">Pool type</label>
+    <select id="pool_type" name="pool_type">
+      <option value="">—</option>
+      {% for t in pool_types %}<option value="{{ t.value }}" {{ 'selected' if pool.pool_type == t }}>{{ t.value.replace("_", "-") }}</option>{% endfor %}
+    </select>
+
+    <label for="shape">Shape</label>
+    <select id="shape" name="shape">
+      <option value="">—</option>
+      {% for s in shapes %}<option value="{{ s.value }}" {{ 'selected' if pool.shape == s }}>{{ s.value }}</option>{% endfor %}
+    </select>
+
+    <label>Dimensions <span class="muted small">(metres — length is the diameter for round pools)</span></label>
+    <div class="row">
+      <input type="number" step="any" min="0" name="length_m" placeholder="length / diameter"
+        value="{{ '%g'|format(pool.length_m) if pool.length_m is not none else '' }}">
+      <input type="number" step="any" min="0" name="width_m" placeholder="width"
+        value="{{ '%g'|format(pool.width_m) if pool.width_m is not none else '' }}">
+      <input type="number" step="any" min="0" name="avg_depth_m" placeholder="avg depth"
+        value="{{ '%g'|format(pool.avg_depth_m) if pool.avg_depth_m is not none else '' }}">
+    </div>
+
+    <label for="location">Location <span class="muted small">(for weather &amp; local time)</span></label>
+    <input type="text" id="location" name="location" value="{{ pool.location_name or '' }}" placeholder="e.g. Brisbane, Australia">
+    <div class="row">
+      <input type="number" step="any" name="latitude" placeholder="latitude"
+        value="{{ pool.latitude if pool.latitude is not none else '' }}">
+      <input type="number" step="any" name="longitude" placeholder="longitude"
+        value="{{ pool.longitude if pool.longitude is not none else '' }}">
+    </div>
+    {% if pool.timezone %}<p class="muted small">Timezone: {{ pool.timezone }}</p>{% endif %}
+
+    <button type="submit" class="primary">Save changes</button>
+  </form>
+</div>
+{% endblock %}

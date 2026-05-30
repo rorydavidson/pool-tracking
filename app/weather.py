@@ -84,6 +84,25 @@ def geocode(place: str) -> tuple[float, float, str] | None:
     return float(r["latitude"]), float(r["longitude"]), label
 
 
+def timezone_for(lat: float, lon: float) -> str | None:
+    """Return the IANA timezone name for a coordinate, via Open-Meteo."""
+    try:
+        resp = httpx.get(
+            FORECAST_URL,
+            params={
+                "latitude": lat, "longitude": lon,
+                "timezone": "auto", "forecast_days": 1,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        tz = resp.json().get("timezone")
+    except (httpx.HTTPError, ValueError):
+        logger.warning("Timezone lookup failed for (%s, %s)", lat, lon)
+        return None
+    return tz if isinstance(tz, str) and tz else None
+
+
 def _round(coord: float) -> float:
     return round(coord, 2)  # ~1 km granularity for cache reuse
 

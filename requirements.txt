@@ -22,6 +22,10 @@ httpx>=0.27
 # shadow (MQTT-over-WebSocket); paho is the pure-Python client we connect with.
 paho-mqtt>=2.1
 
+# IANA timezone database for zoneinfo (the slim base image ships without it),
+# used to display reading times in each pool's local timezone.
+tzdata>=2024.1
+
 # Claude API — generates pool chemistry advice on the fly
 anthropic>=0.92
 

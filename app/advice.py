@@ -140,11 +140,23 @@ def _build_pool_payload(
 ) -> str:
     import json
 
+    from .models import estimate_volume_litres
+
     payload = {
         "pool": {
             "name": pool.name,
             "volume_litres": pool.volume_litres,
             "volume_us_gallons": round(pool.volume_litres / 3.78541, 0),
+            "volume_estimate_from_dimensions_litres": estimate_volume_litres(
+                pool.shape, pool.length_m, pool.width_m, pool.avg_depth_m
+            ),
+            "type": pool.pool_type.value if pool.pool_type else None,
+            "shape": pool.shape.value if pool.shape else None,
+            "dimensions_m": {
+                "length": pool.length_m,
+                "width": pool.width_m,
+                "avg_depth": pool.avg_depth_m,
+            },
             "sanitiser": pool.sanitizer.value,
             "surface": pool.surface.value,
             "setting": "indoor" if pool.indoor else "outdoor",

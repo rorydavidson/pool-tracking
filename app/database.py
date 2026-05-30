@@ -42,6 +42,12 @@ _LIGHTWEIGHT_MIGRATIONS = {
         "latitude": "FLOAT",
         "longitude": "FLOAT",
         "notes": "TEXT",
+        "pool_type": "VARCHAR(20)",
+        "shape": "VARCHAR(20)",
+        "length_m": "FLOAT",
+        "width_m": "FLOAT",
+        "avg_depth_m": "FLOAT",
+        "timezone": "VARCHAR(64)",
     },
     "readings": {
         "ec": "FLOAT",

@@ -29,6 +29,25 @@
 
     <label class="checkbox"><input type="checkbox" name="indoor" value="true"> Indoor pool</label>
 
+    <label for="pool_type">Pool type</label>
+    <select id="pool_type" name="pool_type">
+      <option value="">—</option>
+      {% for t in pool_types %}<option value="{{ t.value }}">{{ t.value.replace("_", "-") }}</option>{% endfor %}
+    </select>
+
+    <label for="shape">Shape</label>
+    <select id="shape" name="shape">
+      <option value="">—</option>
+      {% for s in shapes %}<option value="{{ s.value }}">{{ s.value }}</option>{% endfor %}
+    </select>
+
+    <label>Dimensions <span class="muted small">(metres — used to confirm volume)</span></label>
+    <div class="row">
+      <input type="number" step="any" min="0" name="length_m" placeholder="length / diameter">
+      <input type="number" step="any" min="0" name="width_m" placeholder="width">
+      <input type="number" step="any" min="0" name="avg_depth_m" placeholder="avg depth">
+    </div>
+
     <label for="location">Location <span class="muted small">(for weather correlation)</span></label>
     <input type="text" id="location" name="location" placeholder="e.g. Brisbane, Australia">
     <p class="muted small">Enter a town/city and we'll look up its coordinates, or set them directly below.</p>

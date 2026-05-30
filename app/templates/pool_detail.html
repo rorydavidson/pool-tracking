@@ -9,10 +9,16 @@
       ({{ "%.0f"|format(pool.volume_litres / 3.78541) }} US gal) ·
       {{ pool.sanitizer.value }} · {{ pool.surface.value }} ·
       {{ "indoor" if pool.indoor else "outdoor" }}
+      {% if pool.pool_type %} · {{ pool.pool_type.value.replace("_", "-") }}{% endif %}
+      {% if pool.shape %} · {{ pool.shape.value }}{% endif %}
+      {% if pool.length_m and pool.avg_depth_m %} ·
+        {{ "%g"|format(pool.length_m) }}{% if pool.width_m %}×{{ "%g"|format(pool.width_m) }}{% endif %}m,
+        {{ "%g"|format(pool.avg_depth_m) }}m deep{% endif %}
       {% if pool.location_name %} · 📍 {{ pool.location_name }}{% endif %}
     </p>
   </div>
   <div class="head-actions">
+    <a class="secondary" href="/pools/{{ pool.id }}/edit">⚙ Edit details</a>
     {% if readings %}<a class="secondary" href="/pools/{{ pool.id }}/analysis">📈 Analysis</a>{% endif %}
     <a class="primary" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
   </div>
@@ -20,28 +26,6 @@
 
 {% if flash %}<p class="alert low">{{ flash }}</p>{% endif %}
 {% if error %}<p class="alert critical">{{ error }}</p>{% endif %}
-
-<details class="location-edit"{% if not pool.latitude or not pool.longitude %} open{% endif %}>
-  <summary>{% if pool.latitude and pool.longitude %}Update location{% else %}Set a location (for weather correlation){% endif %}</summary>
-  <form method="post" action="/pools/{{ pool.id }}/location" class="inline-form">
-    <div>
-      <label for="location">Town / city</label>
-      <input type="text" id="location" name="location" placeholder="e.g. Brisbane, Australia"
-        value="{{ pool.location_name or '' }}">
-    </div>
-    <div>
-      <label for="latitude">Latitude</label>
-      <input type="number" step="any" id="latitude" name="latitude"
-        placeholder="optional" value="{{ pool.latitude if pool.latitude is not none else '' }}">
-    </div>
-    <div>
-      <label for="longitude">Longitude</label>
-      <input type="number" step="any" id="longitude" name="longitude"
-        placeholder="optional" value="{{ pool.longitude if pool.longitude is not none else '' }}">
-    </div>
-    <button type="submit" class="secondary">Save location</button>
-  </form>
-</details>
 
 {% if not latest %}
   <div class="card empty">
@@ -67,7 +51,7 @@
       </form>
     </div>
     {% if advice_generated_at %}
-      <p class="muted small">Generated {{ advice_generated_at.strftime("%Y-%m-%d %H:%M UTC") }}.
+      <p class="muted small">Generated {{ fmt_local(advice_generated_at, pool.timezone) }}.
         This stays put until you add a reading or refresh.</p>
     {% endif %}
     {% if assessment.summary %}<p class="summary">{{ assessment.summary }}</p>{% endif %}
@@ -106,7 +90,7 @@
 
   <section class="card">
     <h2>Latest reading</h2>
-    <p class="muted small">{{ latest.taken_at.strftime("%Y-%m-%d %H:%M UTC") }} · {{ latest.source.value }}</p>
+    <p class="muted small">{{ fmt_local(latest.taken_at, pool.timezone) }} · {{ latest.source.value }}</p>
     {% if latest.image_path %}
       <a class="strip-thumb" href="/pools/{{ pool.id }}/readings/{{ latest.id }}/image" target="_blank">
         <img src="/pools/{{ pool.id }}/readings/{{ latest.id }}/image" alt="Test-strip photo">
@@ -151,6 +135,7 @@
     <div class="section-head">
       <h2>History</h2>
       <div class="history-tools">
+        <a class="secondary small" href="/pools/{{ pool.id }}/snapshot" title="Export readings from the last 4 hours + pool details">📸 Snapshot (4h)</a>
         <a class="secondary small" href="/pools/{{ pool.id }}/export">⬇ Export JSON</a>
         <form method="post" action="/pools/{{ pool.id }}/import" enctype="multipart/form-data" class="import-form">
           <input type="file" name="file" accept="application/json,.json" required>
@@ -176,7 +161,7 @@
                 <button type="submit" class="icon-delete" title="Delete reading" aria-label="Delete reading">✕</button>
               </form>
             </td>
-            <td>{{ r.taken_at.strftime("%m-%d %H:%M") }}</td>
+            <td>{{ fmt_local(r.taken_at, pool.timezone, "%m-%d %H:%M") }}</td>
             <td>{{ r.source.value }}</td>
             <td>{{ "%g"|format(r.ph) if r.ph is not none else "–" }}</td>
             <td>{{ "%g"|format(r.free_chlorine) if r.free_chlorine is not none else "–" }}</td>

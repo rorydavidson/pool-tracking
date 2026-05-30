@@ -36,6 +36,52 @@ class SurfaceType(str, enum.Enum):
     tile = "tile"
 
 
+class PoolType(str, enum.Enum):
+    in_ground = "in_ground"
+    above_ground = "above_ground"
+
+
+class PoolShape(str, enum.Enum):
+    rectangle = "rectangle"
+    oval = "oval"
+    round = "round"
+    kidney = "kidney"
+    other = "other"
+
+
+def estimate_volume_litres(
+    shape: "PoolShape | str | None",
+    length_m: float | None,
+    width_m: float | None,
+    avg_depth_m: float | None,
+) -> float | None:
+    """Estimate water volume (litres) from shape + dimensions, or None.
+
+    Metric: lengths in metres. ``round`` uses ``length_m`` as the diameter.
+    """
+    import math
+
+    if not avg_depth_m or avg_depth_m <= 0:
+        return None
+    shape_val = shape.value if isinstance(shape, PoolShape) else (shape or "")
+
+    if shape_val == "round":
+        if not length_m or length_m <= 0:
+            return None
+        area = math.pi * (length_m / 2) ** 2
+    else:
+        if not length_m or not width_m or length_m <= 0 or width_m <= 0:
+            return None
+        if shape_val == "oval":
+            area = math.pi / 4 * length_m * width_m
+        elif shape_val == "kidney":
+            area = 0.85 * length_m * width_m  # rough kidney/freeform factor
+        else:  # rectangle / other
+            area = length_m * width_m
+
+    return round(area * avg_depth_m * 1000, 0)
+
+
 class Provider(str, enum.Enum):
     aiper = "aiper"
     blueriiot = "blueriiot"
@@ -88,10 +134,21 @@ class Pool(Base):
     )
     surface: Mapped[SurfaceType] = mapped_column(Enum(SurfaceType), default=SurfaceType.plaster)
     indoor: Mapped[bool] = mapped_column(default=False)
+
+    # Physical spec, used to confirm the water volume and aid analysis.
+    pool_type: Mapped[PoolType | None] = mapped_column(Enum(PoolType))
+    shape: Mapped[PoolShape | None] = mapped_column(Enum(PoolShape))
+    length_m: Mapped[float | None] = mapped_column(Float)
+    width_m: Mapped[float | None] = mapped_column(Float)
+    avg_depth_m: Mapped[float | None] = mapped_column(Float)
+
     # Location, used to correlate readings with historical weather.
     location_name: Mapped[str | None] = mapped_column(String(160))
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
+    # IANA timezone (e.g. "Europe/London") derived from the location, for
+    # displaying reading times in the pool's local time.
+    timezone: Mapped[str | None] = mapped_column(String(64))
     # Free-text context the owner can add (e.g. "recently shocked", "near oak
     # trees"). Passed to the advice generator as extra context.
     notes: Mapped[str | None] = mapped_column(Text)

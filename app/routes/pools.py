@@ -5,7 +5,8 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import (
@@ -22,7 +23,17 @@ from ..advice import deserialise_assessment, generate_advice, serialise_assessme
 from ..charts import Point, line_chart
 from ..config import get_settings
 from ..database import get_db
-from ..models import Pool, PoolAdvice, Reading, ReadingSource, SanitizerType, SurfaceType
+from ..models import (
+    Pool,
+    PoolAdvice,
+    PoolShape,
+    PoolType,
+    Reading,
+    ReadingSource,
+    SanitizerType,
+    SurfaceType,
+    estimate_volume_litres,
+)
 from ..templating import templates
 from ..vision import MAX_IMAGE_BYTES, SUPPORTED_IMAGE_TYPES, VisionUnavailable, read_test_strip
 
@@ -122,18 +133,37 @@ def dashboard(request: Request, user=Depends(auth.current_user), db: Session = D
     )
 
 
+def _pool_form_context(user, **extra) -> dict:
+    ctx = {
+        "user": user,
+        "sanitizers": list(SanitizerType),
+        "surfaces": list(SurfaceType),
+        "pool_types": list(PoolType),
+        "shapes": list(PoolShape),
+    }
+    ctx.update(extra)
+    return ctx
+
+
 @router.get("/pools/new", response_class=HTMLResponse)
 def new_pool_form(request: Request, user=Depends(auth.current_user)):
     if not user:
         return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse(
-        request,
-        "pool_form.html",
-        {"user": user,
-            "sanitizers": list(SanitizerType),
-            "surfaces": list(SurfaceType),
-        },
-    )
+    return templates.TemplateResponse(request, "pool_form.html", _pool_form_context(user))
+
+
+def _parse_float(value: str) -> float | None:
+    try:
+        return float(value) if value.strip() else None
+    except (ValueError, AttributeError):
+        return None
+
+
+def _enum_or_none(enum_cls, value: str):
+    try:
+        return enum_cls(value) if value.strip() else None
+    except ValueError:
+        return None
 
 
 @router.post("/pools/new")
@@ -145,6 +175,11 @@ def create_pool(
     sanitizer: str = Form("chlorine"),
     surface: str = Form("plaster"),
     indoor: bool = Form(False),
+    pool_type: str = Form(""),
+    shape: str = Form(""),
+    length_m: str = Form(""),
+    width_m: str = Form(""),
+    avg_depth_m: str = Form(""),
     location: str = Form(""),
     latitude: str = Form(""),
     longitude: str = Form(""),
@@ -164,9 +199,15 @@ def create_pool(
         sanitizer=SanitizerType(sanitizer),
         surface=SurfaceType(surface),
         indoor=indoor,
+        pool_type=_enum_or_none(PoolType, pool_type),
+        shape=_enum_or_none(PoolShape, shape),
+        length_m=_parse_float(length_m),
+        width_m=_parse_float(width_m),
+        avg_depth_m=_parse_float(avg_depth_m),
         location_name=place,
         latitude=lat,
         longitude=lon,
+        timezone=_timezone_for(lat, lon),
     )
     db.add(pool)
     db.commit()
@@ -188,6 +229,16 @@ def _resolve_location(
         if geo:
             lat, lon, place = geo
     return lat, lon, place
+
+
+def _timezone_for(lat: float | None, lon: float | None) -> str | None:
+    """Look up the IANA timezone for a coordinate (best-effort)."""
+    if lat is None or lon is None:
+        return None
+    try:
+        return weather.timezone_for(lat, lon)
+    except Exception:  # noqa: BLE001 - timezone is a nice-to-have
+        return None
 
 
 @router.get("/pools/{pool_id}", response_class=HTMLResponse)
@@ -273,9 +324,22 @@ def pool_analysis(
         (r.cyanuric_acid for r in reversed(readings) if r.cyanuric_acid is not None), None
     )
 
+    def _local(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        if pool.timezone:
+            try:
+                return value.astimezone(ZoneInfo(pool.timezone))
+            except (ZoneInfoNotFoundError, ValueError):
+                pass
+        return value
+
     charts = []
     for attr, label, unit in READING_CHART_FIELDS:
-        series = [Point(r.taken_at, getattr(r, attr)) for r in readings if getattr(r, attr) is not None]
+        series = [
+            Point(_local(r.taken_at), getattr(r, attr))
+            for r in readings if getattr(r, attr) is not None
+        ]
         if not series:
             continue
         target = _target_for(attr, pool, latest_cya)
@@ -577,6 +641,129 @@ def export_readings(
     )
 
 
+def _local_iso(value: datetime, tzname: str | None) -> str | None:
+    """ISO-8601 timestamp of ``value`` in ``tzname``, or None if no tz."""
+    if not tzname:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    try:
+        return value.astimezone(ZoneInfo(tzname)).isoformat()
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
+
+
+# Human-friendly unit labels for the snapshot, so downstream tools/LLMs need
+# no domain knowledge to interpret the numbers.
+SNAPSHOT_UNITS = {
+    "ph": "pH (unitless)", "free_chlorine": "ppm", "total_chlorine": "ppm",
+    "total_alkalinity": "ppm", "cyanuric_acid": "ppm", "calcium_hardness": "ppm",
+    "salt": "ppm", "orp": "mV", "ec": "µS/cm", "tds": "ppm", "temperature_c": "°C",
+}
+
+SNAPSHOT_WINDOW_HOURS = 4
+
+
+def _pool_spec_dict(pool: Pool) -> dict:
+    return {
+        "name": pool.name,
+        "type": pool.pool_type.value if pool.pool_type else None,
+        "shape": pool.shape.value if pool.shape else None,
+        "dimensions_m": {
+            "length": pool.length_m,
+            "width": pool.width_m,
+            "avg_depth": pool.avg_depth_m,
+        },
+        "volume_litres": pool.volume_litres,
+        "volume_estimate_litres": estimate_volume_litres(
+            pool.shape, pool.length_m, pool.width_m, pool.avg_depth_m
+        ),
+        "sanitiser": pool.sanitizer.value,
+        "surface": pool.surface.value,
+        "setting": "indoor" if pool.indoor else "outdoor",
+        "location_name": pool.location_name,
+        "latitude": pool.latitude,
+        "longitude": pool.longitude,
+        "timezone": pool.timezone,
+        "notes": pool.notes,
+    }
+
+
+@router.get("/pools/{pool_id}/snapshot")
+def export_snapshot(
+    pool_id: int, user=Depends(auth.current_user), db: Session = Depends(get_db)
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=SNAPSHOT_WINDOW_HOURS)
+    readings = db.scalars(
+        select(Reading)
+        .where(Reading.pool_id == pool.id, Reading.taken_at >= cutoff)
+        .order_by(Reading.taken_at.desc())
+    ).all()
+
+    snapshot_readings = []
+    for r in readings:
+        item = {
+            "taken_at_utc": r.taken_at.astimezone(timezone.utc).isoformat()
+            if r.taken_at.tzinfo else r.taken_at.replace(tzinfo=timezone.utc).isoformat(),
+            "taken_at_local": _local_iso(r.taken_at, pool.timezone),
+            "source": r.source.value,
+        }
+        if r.external_id:
+            item["external_id"] = r.external_id
+        for field in EXPORT_NUMERIC_FIELDS:
+            val = getattr(r, field)
+            if val is not None:
+                item[field] = val
+        snapshot_readings.append(item)
+
+    advice = None
+    if pool.advice is not None:
+        try:
+            assessment = deserialise_assessment(pool.advice.payload)
+            advice = {
+                "summary": assessment.summary,
+                "overall": assessment.overall.value,
+                "generated_at_utc": pool.advice.generated_at.replace(
+                    tzinfo=timezone.utc
+                ).isoformat() if pool.advice.generated_at.tzinfo is None
+                else pool.advice.generated_at.isoformat(),
+            }
+        except Exception:  # noqa: BLE001 - advice is supplementary
+            advice = None
+
+    payload = {
+        "kind": "pool-tracking.snapshot",
+        "version": 1,
+        "description": (
+            f"Snapshot of pool water readings from the last "
+            f"{SNAPSHOT_WINDOW_HOURS} hours, with full pool details."
+        ),
+        "generated_at_utc": now.isoformat(),
+        "generated_at_local": _local_iso(now, pool.timezone),
+        "timezone": pool.timezone,
+        "window_hours": SNAPSHOT_WINDOW_HOURS,
+        "units": SNAPSHOT_UNITS,
+        "pool": _pool_spec_dict(pool),
+        "reading_count": len(snapshot_readings),
+        "readings": snapshot_readings,
+        "latest_advice": advice,
+    }
+
+    stamp = (_local_iso(now, pool.timezone) or now.isoformat())[:16].replace(":", "")
+    filename = f"{_slug(pool.name)}-snapshot-{stamp}.json"
+    return JSONResponse(
+        payload,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/pools/{pool_id}/import")
 async def import_readings(
     pool_id: int,
@@ -689,8 +876,79 @@ def set_location(
     pool.latitude = lat
     pool.longitude = lon
     pool.location_name = place
+    pool.timezone = _timezone_for(lat, lon)
     db.commit()
     return RedirectResponse(f"/pools/{pool.id}?flash=Location updated", status_code=303)
+
+
+@router.get("/pools/{pool_id}/edit", response_class=HTMLResponse)
+def edit_pool_form(
+    request: Request,
+    pool_id: int,
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+    estimate = estimate_volume_litres(
+        pool.shape, pool.length_m, pool.width_m, pool.avg_depth_m
+    )
+    return templates.TemplateResponse(
+        request, "pool_edit.html", _pool_form_context(user, pool=pool, volume_estimate=estimate)
+    )
+
+
+@router.post("/pools/{pool_id}/edit")
+def update_pool(
+    pool_id: int,
+    name: str = Form(...),
+    volume: float = Form(...),
+    sanitizer: str = Form("chlorine"),
+    surface: str = Form("plaster"),
+    indoor: bool = Form(False),
+    pool_type: str = Form(""),
+    shape: str = Form(""),
+    length_m: str = Form(""),
+    width_m: str = Form(""),
+    avg_depth_m: str = Form(""),
+    location: str = Form(""),
+    latitude: str = Form(""),
+    longitude: str = Form(""),
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+
+    pool.name = name.strip() or pool.name
+    pool.volume_litres = round(volume, 1)
+    pool.sanitizer = SanitizerType(sanitizer)
+    pool.surface = SurfaceType(surface)
+    pool.indoor = indoor
+    pool.pool_type = _enum_or_none(PoolType, pool_type)
+    pool.shape = _enum_or_none(PoolShape, shape)
+    pool.length_m = _parse_float(length_m)
+    pool.width_m = _parse_float(width_m)
+    pool.avg_depth_m = _parse_float(avg_depth_m)
+
+    # Re-resolve location only when something location-related was provided, so
+    # editing other fields doesn't wipe an existing location.
+    if location.strip() or latitude.strip() or longitude.strip():
+        lat, lon, place = _resolve_location(location, latitude, longitude)
+        if lat is not None and lon is not None:
+            pool.latitude = lat
+            pool.longitude = lon
+            pool.location_name = place
+            pool.timezone = _timezone_for(lat, lon)
+
+    db.commit()
+    return RedirectResponse(f"/pools/{pool.id}?flash=Details updated", status_code=303)
 
 
 @router.post("/pools/{pool_id}/advice/refresh")
