@@ -54,6 +54,10 @@ _LIGHTWEIGHT_MIGRATIONS = {
         "ec": "FLOAT",
         "image_path": "VARCHAR(255)",
     },
+    "provider_credentials": {
+        "auto_sync_enabled": "BOOLEAN DEFAULT 0",
+        "auto_sync_pool_id": "INTEGER",
+    },
 }
 
 

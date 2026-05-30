@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     advice_model: str = "claude-opus-4-8"
     advice_effort: str = "medium"  # low | medium | high | max
 
+    # Automatic device syncing. The scheduler pulls readings from devices that
+    # have auto-sync enabled, no more often than this many hours. Set to 0 to
+    # disable the background scheduler entirely (manual sync still works).
+    auto_sync_interval_hours: float = 1.0
+
     # Email / magic link.
     # Delivery provider is chosen automatically: Resend if an API key is set,
     # else SMTP if a host is set, else console (link logged + saved to outbox).

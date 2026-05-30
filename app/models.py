@@ -245,7 +245,15 @@ class ProviderCredential(Base):
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_sync_error: Mapped[str | None] = mapped_column(Text)
 
+    # Automatic background syncing: when enabled, the scheduler periodically
+    # pulls readings from this device into the chosen pool.
+    auto_sync_enabled: Mapped[bool] = mapped_column(default=False)
+    auto_sync_pool_id: Mapped[int | None] = mapped_column(
+        ForeignKey("pools.id", ondelete="SET NULL")
+    )
+
     user: Mapped["User"] = relationship(back_populates="credentials")
+    auto_sync_pool: Mapped["Pool | None"] = relationship()
 
     __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_user_provider"),)
 

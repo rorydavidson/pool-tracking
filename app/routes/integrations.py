@@ -1,27 +1,21 @@
 """Connect, verify, sync, and disconnect third-party device accounts."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import auth
+from ..config import get_settings
 from ..database import get_db
 from ..integrations import ProviderError, get_client
-from ..integrations.base import DeviceMeasurement
-from ..models import Pool, Provider, ProviderCredential, Reading, ReadingSource
-from ..security import decrypt_json, encrypt_json
+from ..models import Pool, Provider, ProviderCredential
+from ..security import encrypt_json
+from ..sync_service import sync_credential
 from ..templating import templates
 
 router = APIRouter()
-
-_PROVIDER_SOURCE = {
-    Provider.aiper: ReadingSource.aiper,
-    Provider.blueriiot: ReadingSource.blueriiot,
-}
 
 
 def _credentials_by_provider(db: Session, user_id: int) -> dict[Provider, ProviderCredential]:
@@ -39,6 +33,7 @@ def integrations_page(
         return RedirectResponse("/login", status_code=303)
     creds = _credentials_by_provider(db, user.id)
     pools = db.scalars(select(Pool).where(Pool.user_id == user.id).order_by(Pool.name)).all()
+    settings = get_settings()
     return templates.TemplateResponse(
         request,
         "integrations.html",
@@ -46,6 +41,7 @@ def integrations_page(
             "providers": list(Provider),
             "creds": creds,
             "pools": pools,
+            "auto_sync_hours": settings.auto_sync_interval_hours,
             "flash": request.query_params.get("flash"),
             "error": request.query_params.get("error"),
         },
@@ -129,58 +125,48 @@ def sync(
     if pool is None or cred is None:
         return RedirectResponse("/integrations?error=Pool or connection not found", status_code=303)
 
-    try:
-        client = get_client(prov, decrypt_json(cred.secret_blob))
-        measurements = client.latest_measurements()
-    except ProviderError as exc:
-        cred.last_sync_error = str(exc)
-        db.commit()
-        return RedirectResponse(f"/integrations?error={exc}", status_code=303)
-
-    added = _store_measurements(db, pool, prov, measurements)
-    cred.last_sync_at = datetime.now(timezone.utc)
-    cred.last_sync_error = None
-    db.commit()
+    added, error = sync_credential(db, cred, pool)
+    if error:
+        return RedirectResponse(f"/integrations?error={error}", status_code=303)
     return RedirectResponse(
         f"/integrations?flash=Synced {added} new reading(s) from {prov.value}", status_code=303
     )
 
 
-def _store_measurements(
-    db: Session, pool: Pool, provider: Provider, measurements: list[DeviceMeasurement]
-) -> int:
-    source = _PROVIDER_SOURCE[provider]
-    added = 0
-    for m in measurements:
-        # De-dupe on (pool, source, external_id, taken_at).
-        exists = db.scalar(
-            select(Reading).where(
-                Reading.pool_id == pool.id,
-                Reading.source == source,
-                Reading.external_id == m.external_id,
-                Reading.taken_at == m.taken_at,
-            )
+@router.post("/integrations/{provider}/autosync")
+def set_autosync(
+    provider: str,
+    enabled: bool = Form(False),
+    pool_id: str = Form(""),
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    prov = Provider(provider)
+    cred = db.scalar(
+        select(ProviderCredential).where(
+            ProviderCredential.user_id == user.id, ProviderCredential.provider == prov
         )
-        if exists:
-            continue
-        db.add(
-            Reading(
-                pool_id=pool.id,
-                source=source,
-                taken_at=m.taken_at,
-                external_id=m.external_id,
-                ph=m.ph,
-                free_chlorine=m.free_chlorine,
-                total_chlorine=m.total_chlorine,
-                total_alkalinity=m.total_alkalinity,
-                cyanuric_acid=m.cyanuric_acid,
-                calcium_hardness=m.calcium_hardness,
-                salt=m.salt,
-                orp=m.orp,
-                ec=m.ec,
-                tds=m.tds,
-                temperature_c=m.temperature_c,
-            )
+    )
+    if cred is None:
+        return RedirectResponse("/integrations?error=Connection not found", status_code=303)
+
+    target = None
+    if pool_id.strip():
+        target = db.scalar(
+            select(Pool).where(Pool.id == int(pool_id), Pool.user_id == user.id)
         )
-        added += 1
-    return added
+    if enabled and target is None:
+        return RedirectResponse(
+            "/integrations?error=Choose a pool to auto-sync into", status_code=303
+        )
+
+    cred.auto_sync_enabled = enabled
+    cred.auto_sync_pool_id = target.id if target else None
+    db.commit()
+    msg = (
+        f"Auto-sync on for {prov.value} into {target.name}"
+        if enabled else f"Auto-sync off for {prov.value}"
+    )
+    return RedirectResponse(f"/integrations?flash={msg}", status_code=303)

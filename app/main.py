@@ -41,11 +41,15 @@ app.include_router(integrations.router)
 def _startup() -> None:
     settings.ensure_dirs()
     init_db()
+    from .scheduler import start_scheduler
+
+    start_scheduler()
     logging.getLogger("pool_tracking").info(
-        "Started Pool Tracking %s (email=%s, advice=%s)",
+        "Started Pool Tracking %s (email=%s, advice=%s, auto_sync=%sh)",
         __version__,
         settings.email_provider,
         "claude" if settings.anthropic_api_key else "fallback",
+        settings.auto_sync_interval_hours,
     )
 
 

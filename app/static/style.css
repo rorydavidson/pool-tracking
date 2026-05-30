@@ -103,6 +103,10 @@ textarea { resize: vertical; }
 .inline-form label { margin-top: 0; }
 .inline-form select { width: auto; min-width: 160px; }
 
+.autosync-form { align-items: center; }
+.autosync-form .checkbox { white-space: nowrap; margin: 0; flex: 0 0 auto; }
+.autosync-form button { margin-top: 0; }
+
 button { cursor: pointer; font-family: inherit; }
 .primary {
   display: inline-block; background: var(--accent); color: #fff; border: none;

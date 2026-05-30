@@ -29,6 +29,10 @@
         {% if cred.last_sync_at %}Last synced {{ cred.last_sync_at.strftime("%Y-%m-%d %H:%M UTC") }}.{% else %}Not synced yet.{% endif %}
         {% if cred.last_sync_error %}<span class="alert critical inline">Last error: {{ cred.last_sync_error }}</span>{% endif %}
       </p>
+      {% if cred.auto_sync_enabled and cred.auto_sync_pool %}
+        <p class="muted small">⏱ Auto-syncing every {{ "%g"|format(auto_sync_hours) }}h into
+          <strong>{{ cred.auto_sync_pool.name }}</strong> (manual sync still available).</p>
+      {% endif %}
       {% if pools %}
         <form method="post" action="/integrations/{{ provider.value }}/sync" class="inline-form">
           <label for="pool_{{ provider.value }}">Sync latest readings into</label>
@@ -36,6 +40,20 @@
             {% for pool in pools %}<option value="{{ pool.id }}">{{ pool.name }}</option>{% endfor %}
           </select>
           <button type="submit" class="primary">Sync now</button>
+        </form>
+
+        <form method="post" action="/integrations/{{ provider.value }}/autosync" class="inline-form autosync-form">
+          <label class="checkbox">
+            <input type="checkbox" name="enabled" value="true" {{ 'checked' if cred.auto_sync_enabled }}>
+            Auto-sync every {{ "%g"|format(auto_sync_hours) }}h into
+          </label>
+          <select name="pool_id" aria-label="Auto-sync pool">
+            <option value="">— choose pool —</option>
+            {% for pool in pools %}
+              <option value="{{ pool.id }}" {{ 'selected' if cred.auto_sync_pool_id == pool.id }}>{{ pool.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="secondary">Save</button>
         </form>
       {% else %}
         <p class="muted small">Add a pool first to sync readings into it.</p>

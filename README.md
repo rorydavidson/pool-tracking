@@ -15,6 +15,9 @@ you can spot what is driving changes in your pool.
   - **Aiper HydroComm** smart pool monitor (pH, ORP, EC/TDS, temperature). Water
     quality is read from the device's AWS IoT shadow over MQTT.
   - **Blueriiot Blue Connect** probe (pH, ORP, temperature, salinity).
+- **Scheduled device syncing.** Enable auto-sync per device (with a target pool)
+  on the Devices page and a background scheduler pulls fresh readings every few
+  hours (`AUTO_SYNC_INTERVAL_HOURS`, default 1). Manual sync still works any time.
 - **Read a test strip from a photo.** Upload a photo of a dipped strip next to its
   colour key and Claude reads each pad and pre-fills the form for you to confirm.
   The photo is stored with the reading.
@@ -74,6 +77,7 @@ All configuration is via environment variables (see `.env.example`):
 | `BASE_URL` | Public URL used to build login links (e.g. `https://pool.example.com`). |
 | `ANTHROPIC_API_KEY` | Enables Claude advice and test-strip reading. Without it, a basic fallback is used. |
 | `ADVICE_MODEL` / `ADVICE_EFFORT` | Claude model (default `claude-opus-4-8`) and thinking effort (`low`/`medium`/`high`/`max`). |
+| `AUTO_SYNC_INTERVAL_HOURS` | How often the background scheduler syncs auto-enabled devices (default `1`; `0` disables it). |
 | `RESEND_API_KEY` | Send magic-link emails via [Resend](https://resend.com). Takes priority over SMTP. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS` | SMTP delivery, used when `RESEND_API_KEY` is empty. |
 | `EMAIL_FROM` | From address for login emails. Must be on a domain you've verified with your provider. |
@@ -97,6 +101,8 @@ app/
   auth.py            Magic-link issue/consume + session helpers
   chemistry.py       Shared types, target ranges, deterministic fallback
   advice.py          Claude-powered advice (structured output, prompt caching)
+  sync_service.py    Pull + store device readings (manual route + scheduler)
+  scheduler.py       Background loop that auto-syncs enabled devices
   vision.py          Claude vision: read a test strip from a photo
   charts.py          Dependency-free inline-SVG trend charts
   weather.py         Open-Meteo geocoding, cached daily weather, timezone lookup
