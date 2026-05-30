@@ -10,8 +10,9 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import auth, weather
+from .. import auth, chemistry, weather
 from ..advice import deserialise_assessment, generate_advice, serialise_assessment
+from ..charts import Point, line_chart
 from ..config import get_settings
 from ..database import get_db
 from ..models import Pool, PoolAdvice, Reading, ReadingSource, SanitizerType, SurfaceType
@@ -33,6 +34,21 @@ READING_FIELDS = [
     ("ec", "EC (µS/cm)"),
     ("tds", "TDS (ppm)"),
     ("temperature_c", "Temperature (°C)"),
+]
+
+# (attribute, chart title, unit suffix) for the analysis page trend charts.
+READING_CHART_FIELDS = [
+    ("ph", "pH", ""),
+    ("free_chlorine", "Free chlorine", " ppm"),
+    ("total_chlorine", "Total chlorine", " ppm"),
+    ("total_alkalinity", "Total alkalinity", " ppm"),
+    ("cyanuric_acid", "Cyanuric acid", " ppm"),
+    ("calcium_hardness", "Calcium hardness", " ppm"),
+    ("salt", "Salt", " ppm"),
+    ("orp", "ORP", " mV"),
+    ("ec", "EC", " µS/cm"),
+    ("tds", "TDS", " ppm"),
+    ("temperature_c", "Temperature", " °C"),
 ]
 
 
@@ -195,6 +211,72 @@ def pool_detail(
             "flash": request.query_params.get("flash"),
             "error": request.query_params.get("error"),
         },
+    )
+
+
+def _target_for(attr: str, pool: Pool, latest_cya: float | None):
+    """Return a (low, high) target band for a parameter, or None."""
+    if attr == "ph":
+        return (chemistry.PH.low, chemistry.PH.high)
+    if attr == "total_alkalinity":
+        return (chemistry.TOTAL_ALKALINITY.low, chemistry.TOTAL_ALKALINITY.high)
+    if attr == "calcium_hardness":
+        return (chemistry.CALCIUM_HARDNESS.low, chemistry.CALCIUM_HARDNESS.high)
+    if attr == "orp":
+        return (chemistry.ORP.low, chemistry.ORP.high)
+    if attr == "cyanuric_acid":
+        r = chemistry.cya_range(pool)
+        return (r.low, r.high)
+    if attr == "free_chlorine":
+        r = chemistry.free_chlorine_range(pool, latest_cya)
+        return (r.low, r.high)
+    if attr == "salt" and pool.sanitizer == SanitizerType.saltwater:
+        return (chemistry.SALT.low, chemistry.SALT.high)
+    return None
+
+
+@router.get("/pools/{pool_id}/analysis", response_class=HTMLResponse)
+def pool_analysis(
+    request: Request,
+    pool_id: int,
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+
+    readings = db.scalars(
+        select(Reading).where(Reading.pool_id == pool.id).order_by(Reading.taken_at.asc())
+    ).all()
+
+    latest_cya = next(
+        (r.cyanuric_acid for r in reversed(readings) if r.cyanuric_acid is not None), None
+    )
+
+    charts = []
+    for attr, label, unit in READING_CHART_FIELDS:
+        series = [Point(r.taken_at, getattr(r, attr)) for r in readings if getattr(r, attr) is not None]
+        if not series:
+            continue
+        target = _target_for(attr, pool, latest_cya)
+        charts.append(
+            {
+                "label": label,
+                "unit": unit,
+                "latest": series[-1].value,
+                "count": len(series),
+                "target": target,
+                "svg": line_chart(series, target=target, unit=unit),
+            }
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "analysis.html",
+        {"user": user, "pool": pool, "charts": charts, "reading_count": len(readings)},
     )
 
 

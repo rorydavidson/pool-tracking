@@ -12,7 +12,10 @@
       {% if pool.location_name %} · 📍 {{ pool.location_name }}{% endif %}
     </p>
   </div>
-  <a class="primary" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
+  <div class="head-actions">
+    {% if readings %}<a class="secondary" href="/pools/{{ pool.id }}/analysis">📈 Analysis</a>{% endif %}
+    <a class="primary" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
+  </div>
 </div>
 
 {% if flash %}<p class="alert low">{{ flash }}</p>{% endif %}
