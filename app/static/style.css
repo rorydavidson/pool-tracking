@@ -272,14 +272,15 @@ th { color: var(--muted); font-weight: 600; }
 .btn-bright { background: #fff; color: var(--accent-dark); font-weight: 700; }
 .btn-bright:hover { background: #eef7f9; text-decoration: none; }
 
-.detail-grid {
-  display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: start;
-}
-/* Advice gets the lion's share; latest reading sits in a comfortable sidebar. */
-@media (min-width: 860px) {
-  .detail-grid { grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); }
-}
+/* Sections stack full-width with a consistent gap; the latest-reading metrics
+   sit first (right under the hero), then advice. Advice text is capped to a
+   comfortable reading width so it doesn't sprawl across the whole page. */
+.detail-grid { display: flex; flex-direction: column; gap: 1.25rem; }
 .detail-grid .card { margin-bottom: 0; }
+.detail-grid > .card:not(.assessment) { order: -1; }
+.assessment .summary,
+.assessment .recs,
+.assessment .next-steps { max-width: 74ch; }
 
 .photo-preview {
   display: block; max-width: 100%; max-height: 180px;
