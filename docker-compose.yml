@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    image: pool-tracking:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Keep data inside the named volume regardless of .env.
+      DATA_DIR: /data
+    volumes:
+      - pool_data:/data
+    restart: unless-stopped
+
+volumes:
+  pool_data:

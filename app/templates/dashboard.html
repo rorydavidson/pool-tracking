@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Your pools — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Your pools</h1>
+  <a class="primary" href="/pools/new">+ Add a pool</a>
+</div>
+
+{% if pools %}
+  <div class="grid">
+    {% for pool in pools %}
+      <a class="card pool-card" href="/pools/{{ pool.id }}">
+        <h2>{{ pool.name }}</h2>
+        <p class="muted">
+          {{ "%.0f"|format(pool.volume_litres) }} L ·
+          {{ pool.sanitizer.value }} ·
+          {{ "indoor" if pool.indoor else "outdoor" }}
+        </p>
+        <p class="muted small">{{ pool.readings|length }} reading(s)</p>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card empty">
+    <p>You haven't added a pool yet.</p>
+    <a class="primary" href="/pools/new">Add your first pool</a>
+    <p class="muted small">Then connect an Aiper HydroComm or Blueriiot Blue Connect on the
+      <a href="/integrations">Devices</a> page, or enter test readings manually.</p>
+  </div>
+{% endif %}
+{% endblock %}

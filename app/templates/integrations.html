@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Devices — {{ app_name }}{% endblock %}
+{% set provider_meta = {
+  "aiper": {"name": "Aiper HydroComm", "desc": "Smart pool monitor (pH, ORP, EC/TDS, free chlorine, temperature)."},
+  "blueriiot": {"name": "Blueriiot Blue Connect", "desc": "Pool probe (pH, ORP, temperature, salinity)."}
+} %}
+{% block content %}
+<div class="page-head"><h1>Connected devices</h1></div>
+<p class="muted">Link your device accounts to pull readings automatically. Your login details are
+  encrypted before they're stored, and only used to fetch your measurements.</p>
+
+{% if flash %}<p class="alert low">{{ flash }}</p>{% endif %}
+{% if error %}<p class="alert critical">{{ error }}</p>{% endif %}
+
+{% for provider in providers %}
+  {% set meta = provider_meta[provider.value] %}
+  {% set cred = creds.get(provider) %}
+  <section class="card">
+    <div class="page-head">
+      <div>
+        <h2>{{ meta.name }}</h2>
+        <p class="muted small">{{ meta.desc }}</p>
+      </div>
+      {% if cred %}<span class="badge ok">connected</span>{% endif %}
+    </div>
+
+    {% if cred %}
+      <p class="muted small">
+        {% if cred.last_sync_at %}Last synced {{ cred.last_sync_at.strftime("%Y-%m-%d %H:%M UTC") }}.{% else %}Not synced yet.{% endif %}
+        {% if cred.last_sync_error %}<span class="alert critical inline">Last error: {{ cred.last_sync_error }}</span>{% endif %}
+      </p>
+      {% if pools %}
+        <form method="post" action="/integrations/{{ provider.value }}/sync" class="inline-form">
+          <label for="pool_{{ provider.value }}">Sync latest readings into</label>
+          <select id="pool_{{ provider.value }}" name="pool_id" required>
+            {% for pool in pools %}<option value="{{ pool.id }}">{{ pool.name }}</option>{% endfor %}
+          </select>
+          <button type="submit" class="primary">Sync now</button>
+        </form>
+      {% else %}
+        <p class="muted small">Add a pool first to sync readings into it.</p>
+      {% endif %}
+      <form method="post" action="/integrations/{{ provider.value }}/disconnect">
+        <button type="submit" class="danger-link">Disconnect</button>
+      </form>
+    {% else %}
+      <form method="post" action="/integrations/{{ provider.value }}/connect">
+        <label for="email_{{ provider.value }}">{{ meta.name }} email</label>
+        <input type="email" id="email_{{ provider.value }}" name="email" required>
+        <label for="pw_{{ provider.value }}">Password</label>
+        <input type="password" id="pw_{{ provider.value }}" name="password" required>
+        {% if provider.value == "aiper" %}
+          <label for="url_{{ provider.value }}">API base URL (optional)</label>
+          <input type="text" id="url_{{ provider.value }}" name="base_url" placeholder="https://api.aiper.com">
+        {% endif %}
+        <button type="submit" class="primary">Connect</button>
+      </form>
+    {% endif %}
+  </section>
+{% endfor %}
+{% endblock %}

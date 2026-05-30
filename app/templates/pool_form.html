@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Add a pool — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Add a pool</h1>
+  <p class="muted">The pool's specs let us tailor advice and dosing to your water volume.</p>
+  <form method="post" action="/pools/new">
+    <label for="name">Pool name</label>
+    <input type="text" id="name" name="name" placeholder="Back garden pool" required autofocus>
+
+    <label for="volume">Volume</label>
+    <div class="row">
+      <input type="number" step="any" min="0" id="volume" name="volume" required>
+      <select name="volume_unit" aria-label="Volume unit">
+        <option value="litres">litres</option>
+        <option value="gallons">US gallons</option>
+      </select>
+    </div>
+
+    <label for="sanitizer">Sanitiser</label>
+    <select id="sanitizer" name="sanitizer">
+      {% for s in sanitizers %}<option value="{{ s.value }}">{{ s.value }}</option>{% endfor %}
+    </select>
+
+    <label for="surface">Surface</label>
+    <select id="surface" name="surface">
+      {% for s in surfaces %}<option value="{{ s.value }}">{{ s.value }}</option>{% endfor %}
+    </select>
+
+    <label class="checkbox"><input type="checkbox" name="indoor" value="true"> Indoor pool</label>
+
+    <label for="location">Location <span class="muted small">(for weather correlation)</span></label>
+    <input type="text" id="location" name="location" placeholder="e.g. Brisbane, Australia">
+    <p class="muted small">Enter a town/city and we'll look up its coordinates, or set them directly below.</p>
+    <div class="row">
+      <input type="number" step="any" name="latitude" placeholder="latitude (optional)">
+      <input type="number" step="any" name="longitude" placeholder="longitude (optional)">
+    </div>
+
+    <button type="submit" class="primary">Create pool</button>
+  </form>
+</div>
+{% endblock %}
