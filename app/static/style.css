@@ -183,6 +183,14 @@ th { color: var(--muted); font-weight: 600; }
 .alert.critical { background: #fff0f0; color: var(--critical); }
 .alert.inline { display: inline-block; padding: 0.1rem 0.5rem; }
 
+.row-action { text-align: center; padding: 0.2rem 0.4rem; }
+.row-action form { margin: 0; }
+.icon-delete {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 0.9rem; line-height: 1; padding: 0.25rem 0.4rem; border-radius: 6px;
+}
+.icon-delete:hover { color: var(--critical); background: #fff0f0; }
+
 .weather-line { margin-top: 0.75rem; color: var(--accent-dark); font-size: 0.9rem; }
 .weather-cell { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
 

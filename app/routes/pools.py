@@ -461,6 +461,47 @@ def reading_image(
     return FileResponse(path)
 
 
+@router.post("/pools/{pool_id}/readings/{reading_id}/delete")
+def delete_reading(
+    pool_id: int,
+    reading_id: int,
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+    reading = db.scalar(
+        select(Reading).where(Reading.id == reading_id, Reading.pool_id == pool.id)
+    )
+    if reading is None:
+        return RedirectResponse(f"/pools/{pool.id}", status_code=303)
+
+    # Remove the attached strip photo from disk, if any.
+    if reading.image_path:
+        path = _safe_upload_path(reading.image_path)
+        if path is not None:
+            path.unlink(missing_ok=True)
+
+    db.delete(reading)
+    db.flush()
+
+    # Advice is generated manually, so we don't regenerate here — but if this was
+    # the last reading, the stored advice no longer has anything to describe.
+    remaining = db.scalar(
+        select(Reading).where(Reading.pool_id == pool.id).limit(1)
+    )
+    if remaining is None:
+        advice = db.scalar(select(PoolAdvice).where(PoolAdvice.pool_id == pool.id))
+        if advice is not None:
+            db.delete(advice)
+
+    db.commit()
+    return RedirectResponse(f"/pools/{pool.id}?flash=Reading deleted", status_code=303)
+
+
 @router.post("/pools/{pool_id}/location")
 def set_location(
     pool_id: int,

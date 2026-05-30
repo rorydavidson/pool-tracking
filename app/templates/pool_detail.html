@@ -154,7 +154,7 @@
         <thead><tr>
           <th>When</th><th>Source</th><th>pH</th><th>Free Cl</th><th>Total Cl</th>
           <th>Alk</th><th>CYA</th><th>Calcium</th><th>Salt</th><th>ORP</th>
-          <th>EC</th><th>TDS</th><th>Temp</th><th>Weather</th>
+          <th>EC</th><th>TDS</th><th>Temp</th><th>Weather</th><th aria-label="Delete"></th>
         </tr></thead>
         <tbody>
           {% for r in readings %}
@@ -179,6 +179,12 @@
                 {%- if w.precipitation_mm is not none and w.precipitation_mm > 0 %} ☔{{ "%g"|format(w.precipitation_mm) }}mm{% endif %}
                 {%- if w.description %} {{ w.description }}{% endif -%}
               {%- else -%}–{%- endif -%}
+            </td>
+            <td class="row-action">
+              <form method="post" action="/pools/{{ pool.id }}/readings/{{ r.id }}/delete"
+                    onsubmit="return confirm('Delete this reading? This cannot be undone.');">
+                <button type="submit" class="icon-delete" title="Delete reading" aria-label="Delete reading">✕</button>
+              </form>
             </td>
           </tr>
           {% endfor %}
