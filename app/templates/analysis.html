@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Analysis — {{ pool.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ pool.name }} · Analysis</h1>
+    <p class="muted small">Trends across {{ reading_count }} reading(s). Shaded band = target range.</p>
+  </div>
+  <a class="secondary" href="/pools/{{ pool.id }}">← Back to pool</a>
+</div>
+
+{% if not charts %}
+  <div class="card empty">
+    <p>Not enough data to chart yet.</p>
+    <a class="primary" href="/pools/{{ pool.id }}/readings/new">Add a reading</a>
+  </div>
+{% else %}
+  <div class="chart-grid">
+    {% for c in charts %}
+      {% set state = ('out' if (c.latest < c.target[0] or c.latest > c.target[1]) else 'in') if c.target else 'neutral' %}
+      <section class="card chart-card">
+        <div class="chart-head">
+          <h2>{{ c.label }}</h2>
+          <span class="chart-latest {{ state }}">
+            {{ "%g"|format(c.latest) }}{{ c.unit }}
+          </span>
+        </div>
+        {{ c.svg|safe }}
+        <p class="muted small chart-foot">
+          {% if c.target %}Target {{ "%g"|format(c.target[0]) }}–{{ "%g"|format(c.target[1]) }}{{ c.unit }}{% else %}No fixed target{% endif %}
+          · {{ c.count }} point(s)
+        </p>
+      </section>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,17 +1,25 @@
 """Dashboard, pool management, readings, and advice."""
 from __future__ import annotations
 
+import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import auth, weather
+from .. import auth, chemistry, weather
 from ..advice import deserialise_assessment, generate_advice, serialise_assessment
+from ..charts import Point, line_chart
 from ..config import get_settings
 from ..database import get_db
 from ..models import Pool, PoolAdvice, Reading, ReadingSource, SanitizerType, SurfaceType
@@ -34,6 +42,31 @@ READING_FIELDS = [
     ("tds", "TDS (ppm)"),
     ("temperature_c", "Temperature (°C)"),
 ]
+
+# (attribute, chart title, unit suffix) for the analysis page trend charts.
+READING_CHART_FIELDS = [
+    ("ph", "pH", ""),
+    ("free_chlorine", "Free chlorine", " ppm"),
+    ("total_chlorine", "Total chlorine", " ppm"),
+    ("total_alkalinity", "Total alkalinity", " ppm"),
+    ("cyanuric_acid", "Cyanuric acid", " ppm"),
+    ("calcium_hardness", "Calcium hardness", " ppm"),
+    ("salt", "Salt", " ppm"),
+    ("orp", "ORP", " mV"),
+    ("ec", "EC", " µS/cm"),
+    ("tds", "TDS", " ppm"),
+    ("temperature_c", "Temperature", " °C"),
+]
+
+# Numeric reading columns included in JSON export/import (images excluded).
+EXPORT_NUMERIC_FIELDS = [
+    "ph", "free_chlorine", "total_chlorine", "total_alkalinity", "cyanuric_acid",
+    "calcium_hardness", "salt", "orp", "ec", "tds", "temperature_c",
+]
+
+EXPORT_VERSION = 1
+EXPORT_KIND = "pool-tracking.readings"
+MAX_IMPORT_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 def _get_owned_pool(db: Session, user_id: int, pool_id: int) -> Pool | None:
@@ -195,6 +228,72 @@ def pool_detail(
             "flash": request.query_params.get("flash"),
             "error": request.query_params.get("error"),
         },
+    )
+
+
+def _target_for(attr: str, pool: Pool, latest_cya: float | None):
+    """Return a (low, high) target band for a parameter, or None."""
+    if attr == "ph":
+        return (chemistry.PH.low, chemistry.PH.high)
+    if attr == "total_alkalinity":
+        return (chemistry.TOTAL_ALKALINITY.low, chemistry.TOTAL_ALKALINITY.high)
+    if attr == "calcium_hardness":
+        return (chemistry.CALCIUM_HARDNESS.low, chemistry.CALCIUM_HARDNESS.high)
+    if attr == "orp":
+        return (chemistry.ORP.low, chemistry.ORP.high)
+    if attr == "cyanuric_acid":
+        r = chemistry.cya_range(pool)
+        return (r.low, r.high)
+    if attr == "free_chlorine":
+        r = chemistry.free_chlorine_range(pool, latest_cya)
+        return (r.low, r.high)
+    if attr == "salt" and pool.sanitizer == SanitizerType.saltwater:
+        return (chemistry.SALT.low, chemistry.SALT.high)
+    return None
+
+
+@router.get("/pools/{pool_id}/analysis", response_class=HTMLResponse)
+def pool_analysis(
+    request: Request,
+    pool_id: int,
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+
+    readings = db.scalars(
+        select(Reading).where(Reading.pool_id == pool.id).order_by(Reading.taken_at.asc())
+    ).all()
+
+    latest_cya = next(
+        (r.cyanuric_acid for r in reversed(readings) if r.cyanuric_acid is not None), None
+    )
+
+    charts = []
+    for attr, label, unit in READING_CHART_FIELDS:
+        series = [Point(r.taken_at, getattr(r, attr)) for r in readings if getattr(r, attr) is not None]
+        if not series:
+            continue
+        target = _target_for(attr, pool, latest_cya)
+        charts.append(
+            {
+                "label": label,
+                "unit": unit,
+                "latest": series[-1].value,
+                "count": len(series),
+                "target": target,
+                "svg": line_chart(series, target=target, unit=unit),
+            }
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "analysis.html",
+        {"user": user, "pool": pool, "charts": charts, "reading_count": len(readings)},
     )
 
 
@@ -377,6 +476,194 @@ def reading_image(
     if path is None:
         return RedirectResponse(f"/pools/{pool.id}", status_code=303)
     return FileResponse(path)
+
+
+@router.post("/pools/{pool_id}/readings/{reading_id}/delete")
+def delete_reading(
+    pool_id: int,
+    reading_id: int,
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+    reading = db.scalar(
+        select(Reading).where(Reading.id == reading_id, Reading.pool_id == pool.id)
+    )
+    if reading is None:
+        return RedirectResponse(f"/pools/{pool.id}", status_code=303)
+
+    # Remove the attached strip photo from disk, if any.
+    if reading.image_path:
+        path = _safe_upload_path(reading.image_path)
+        if path is not None:
+            path.unlink(missing_ok=True)
+
+    db.delete(reading)
+    db.flush()
+
+    # Advice is generated manually, so we don't regenerate here — but if this was
+    # the last reading, the stored advice no longer has anything to describe.
+    remaining = db.scalar(
+        select(Reading).where(Reading.pool_id == pool.id).limit(1)
+    )
+    if remaining is None:
+        advice = db.scalar(select(PoolAdvice).where(PoolAdvice.pool_id == pool.id))
+        if advice is not None:
+            db.delete(advice)
+
+    db.commit()
+    return RedirectResponse(f"/pools/{pool.id}?flash=Reading deleted", status_code=303)
+
+
+def _reading_to_export(r: Reading) -> dict:
+    """Serialise one reading to a plain JSON-friendly dict (no image)."""
+    out: dict = {"taken_at": r.taken_at.isoformat(), "source": r.source.value}
+    if r.external_id:
+        out["external_id"] = r.external_id
+    for field in EXPORT_NUMERIC_FIELDS:
+        val = getattr(r, field)
+        if val is not None:
+            out[field] = val
+    return out
+
+
+def _norm_dt(value: datetime) -> datetime:
+    """Normalise to naive UTC so stored and imported timestamps compare equal."""
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _slug(name: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return s or "pool"
+
+
+@router.get("/pools/{pool_id}/export")
+def export_readings(
+    pool_id: int, user=Depends(auth.current_user), db: Session = Depends(get_db)
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+
+    readings = db.scalars(
+        select(Reading).where(Reading.pool_id == pool.id).order_by(Reading.taken_at.asc())
+    ).all()
+    payload = {
+        "kind": EXPORT_KIND,
+        "version": EXPORT_VERSION,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "pool": {
+            "name": pool.name,
+            "volume_litres": pool.volume_litres,
+            "sanitizer": pool.sanitizer.value,
+            "surface": pool.surface.value,
+            "indoor": pool.indoor,
+            "location_name": pool.location_name,
+        },
+        "readings": [_reading_to_export(r) for r in readings],
+    }
+    filename = f"{_slug(pool.name)}-readings.json"
+    return JSONResponse(
+        payload,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/pools/{pool_id}/import")
+async def import_readings(
+    pool_id: int,
+    file: UploadFile = File(...),
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+
+    raw = await file.read()
+    if not raw:
+        return RedirectResponse(f"/pools/{pool.id}?error=The file was empty", status_code=303)
+    if len(raw) > MAX_IMPORT_BYTES:
+        return RedirectResponse(f"/pools/{pool.id}?error=File too large (max 5 MB)", status_code=303)
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return RedirectResponse(f"/pools/{pool.id}?error=Not valid JSON", status_code=303)
+
+    # Accept either our envelope ({"readings": [...]}) or a bare list.
+    items = data.get("readings") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        return RedirectResponse(
+            f"/pools/{pool.id}?error=No readings found in that file", status_code=303
+        )
+
+    # De-dupe against existing readings on (source, external_id, taken_at).
+    seen = {
+        (r.source.value, r.external_id, _norm_dt(r.taken_at))
+        for r in db.scalars(select(Reading).where(Reading.pool_id == pool.id)).all()
+    }
+
+    added = 0
+    skipped = 0
+    for item in items:
+        if not isinstance(item, dict):
+            skipped += 1
+            continue
+        taken_raw = item.get("taken_at")
+        try:
+            taken_at = datetime.fromisoformat(str(taken_raw).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+
+        try:
+            source = ReadingSource(item.get("source", "manual"))
+        except ValueError:
+            source = ReadingSource.manual
+        external_id = item.get("external_id") or None
+
+        key = (source.value, external_id, _norm_dt(taken_at))
+        if key in seen:
+            skipped += 1
+            continue
+
+        values: dict[str, float] = {}
+        for field in EXPORT_NUMERIC_FIELDS:
+            val = item.get(field)
+            if val is None:
+                continue
+            try:
+                values[field] = float(val)
+            except (TypeError, ValueError):
+                continue
+
+        db.add(
+            Reading(
+                pool_id=pool.id,
+                taken_at=taken_at,
+                source=source,
+                external_id=external_id,
+                **values,
+            )
+        )
+        seen.add(key)
+        added += 1
+
+    db.commit()
+    return RedirectResponse(
+        f"/pools/{pool.id}?flash=Imported {added} reading(s), skipped {skipped} duplicate(s)",
+        status_code=303,
+    )
 
 
 @router.post("/pools/{pool_id}/location")

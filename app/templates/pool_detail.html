@@ -12,7 +12,10 @@
       {% if pool.location_name %} · 📍 {{ pool.location_name }}{% endif %}
     </p>
   </div>
-  <a class="primary" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
+  <div class="head-actions">
+    {% if readings %}<a class="secondary" href="/pools/{{ pool.id }}/analysis">📈 Analysis</a>{% endif %}
+    <a class="primary" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
+  </div>
 </div>
 
 {% if flash %}<p class="alert low">{{ flash }}</p>{% endif %}
@@ -145,13 +148,22 @@
   </section>
 
   <section class="card">
-    <h2>History</h2>
+    <div class="section-head">
+      <h2>History</h2>
+      <div class="history-tools">
+        <a class="secondary small" href="/pools/{{ pool.id }}/export">⬇ Export JSON</a>
+        <form method="post" action="/pools/{{ pool.id }}/import" enctype="multipart/form-data" class="import-form">
+          <input type="file" name="file" accept="application/json,.json" required>
+          <button type="submit" class="secondary small">⬆ Import</button>
+        </form>
+      </div>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
           <th>When</th><th>Source</th><th>pH</th><th>Free Cl</th><th>Total Cl</th>
           <th>Alk</th><th>CYA</th><th>Calcium</th><th>Salt</th><th>ORP</th>
-          <th>EC</th><th>TDS</th><th>Temp</th><th>Weather</th>
+          <th>EC</th><th>TDS</th><th>Temp</th><th>Weather</th><th aria-label="Delete"></th>
         </tr></thead>
         <tbody>
           {% for r in readings %}
@@ -176,6 +188,12 @@
                 {%- if w.precipitation_mm is not none and w.precipitation_mm > 0 %} ☔{{ "%g"|format(w.precipitation_mm) }}mm{% endif %}
                 {%- if w.description %} {{ w.description }}{% endif -%}
               {%- else -%}–{%- endif -%}
+            </td>
+            <td class="row-action">
+              <form method="post" action="/pools/{{ pool.id }}/readings/{{ r.id }}/delete"
+                    onsubmit="return confirm('Delete this reading? This cannot be undone.');">
+                <button type="submit" class="icon-delete" title="Delete reading" aria-label="Delete reading">✕</button>
+              </form>
             </td>
           </tr>
           {% endfor %}
