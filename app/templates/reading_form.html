@@ -4,11 +4,45 @@
 <div class="card narrow">
   <h1>Add a water test</h1>
   <p class="muted">Enter whatever you've measured for <strong>{{ pool.name }}</strong>. Leave the rest blank.</p>
+
+  <div class="scan-box">
+    <h2>Read from a test-strip photo</h2>
+    <p class="muted small">Upload a photo of the dipped strip next to its colour key.
+      Claude reads the pads and fills in the values below for you to check.</p>
+    <form method="post" action="/pools/{{ pool.id }}/readings/scan" enctype="multipart/form-data">
+      <input type="file" name="photo" accept="image/*" required>
+      <button type="submit" class="secondary">Read photo</button>
+    </form>
+
+    {% if scan and scan.error %}
+      <p class="alert critical inline">{{ scan.error }}</p>
+    {% elif scan and scan.count is defined %}
+      {% if scan.count %}
+        <p class="alert low inline">Read {{ scan.count }} value(s) — confidence: {{ scan.confidence }}.
+          Check them below before saving.</p>
+      {% else %}
+        <p class="alert inline">Couldn't read any values confidently. Enter them manually.</p>
+      {% endif %}
+      {% if scan.notes %}<p class="muted small">Note: {{ scan.notes }}</p>{% endif %}
+    {% endif %}
+
+    {% if image_path %}
+      <p class="muted small">📎 Photo attached; it'll be saved with this reading.</p>
+    {% endif %}
+  </div>
+
   <form method="post" action="/pools/{{ pool.id }}/readings/new">
+    {% if image_path %}<input type="hidden" name="image_path" value="{{ image_path }}">{% endif %}
     {% for field, label in fields %}
       <label for="{{ field }}">{{ label }}</label>
-      <input type="number" step="any" id="{{ field }}" name="{{ field }}">
+      <input type="number" step="any" id="{{ field }}" name="{{ field }}"
+        value="{{ prefill.get(field) if prefill.get(field) is not none else '' }}">
     {% endfor %}
+    <label for="notes">Other information</label>
+    <p class="muted small">Anything the readings don't capture — recent treatments,
+      heavy use, nearby trees, a refill. Saved to the pool and used to tailor advice.</p>
+    <textarea id="notes" name="notes" rows="3"
+      placeholder="e.g. Shocked the pool two days ago; lots of leaves this week.">{{ pool.notes or "" }}</textarea>
     <button type="submit" class="primary">Save reading &amp; get advice</button>
   </form>
 </div>

@@ -62,10 +62,11 @@ h2 { font-size: 1.15rem; margin: 0 0 0.5rem; }
 
 label { display: block; font-weight: 600; margin: 0.9rem 0 0.3rem; font-size: 0.9rem; }
 label.checkbox { font-weight: 400; display: flex; align-items: center; gap: 0.5rem; }
-input, select {
+input, select, textarea {
   width: 100%; padding: 0.55rem 0.65rem; border: 1px solid var(--line);
   border-radius: 8px; font-size: 1rem; font-family: inherit; background: #fff;
 }
+textarea { resize: vertical; }
 .row { display: flex; gap: 0.5rem; }
 .row input { flex: 2; } .row select { flex: 1; }
 .inline-form { display: flex; align-items: flex-end; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
@@ -79,6 +80,13 @@ button { cursor: pointer; font-family: inherit; }
   margin-top: 1rem;
 }
 .primary:hover { background: var(--accent-dark); text-decoration: none; }
+.secondary {
+  display: inline-block; background: #fff; color: var(--accent-dark);
+  border: 1px solid var(--accent); padding: 0.6rem 1rem; border-radius: 8px;
+  font-size: 0.95rem; font-weight: 600; margin-top: 1rem;
+}
+.secondary:hover { background: #f4f8fa; }
+.secondary.small { padding: 0.3rem 0.7rem; font-size: 0.8rem; margin-top: 0; }
 .btn-link { font-size: 0.85rem; }
 .danger-link {
   background: none; border: none; color: var(--critical); padding: 0.5rem 0;
@@ -99,7 +107,31 @@ button { cursor: pointer; font-family: inherit; }
   padding: 0.1rem 0.5rem; border-radius: 999px; }
 
 .assessment-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.advice-refresh { margin: 0 0 0 auto; }
+.advice-refresh button { margin: 0; }
+
+.location-edit { margin: 0.5rem 0 1rem; }
+.location-edit summary { cursor: pointer; color: var(--accent-dark); font-size: 0.9rem; }
+.location-edit .inline-form { margin-top: 0.6rem; }
+.location-edit .inline-form > div { display: flex; flex-direction: column; }
+
+.scan-box {
+  border: 1px dashed var(--line); border-radius: 10px; padding: 0.9rem 1rem;
+  margin: 1rem 0 1.5rem; background: #f8fbfc;
+}
+.scan-box h2 { margin-top: 0; font-size: 1rem; }
+.scan-box input[type="file"] { margin: 0.3rem 0; }
+.alert.inline { display: inline-block; margin: 0.5rem 0 0; }
+.strip-thumb { display: inline-block; margin: 0.3rem 0 0.6rem; }
+.strip-thumb img {
+  max-width: 220px; max-height: 220px; border-radius: 8px; border: 1px solid var(--line);
+}
 .summary { font-size: 1.05rem; }
+
+.next-steps { margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 0.75rem; }
+.next-steps h3 { margin: 0 0 0.4rem; font-size: 0.95rem; }
+.next-steps ol { margin: 0; padding-left: 1.2rem; }
+.next-steps li { margin: 0.3rem 0; }
 
 .recs { list-style: none; padding: 0; margin: 0.5rem 0 0; }
 .rec {

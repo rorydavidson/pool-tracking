@@ -15,6 +15,31 @@
   <a class="primary" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
 </div>
 
+{% if flash %}<p class="alert low">{{ flash }}</p>{% endif %}
+{% if error %}<p class="alert critical">{{ error }}</p>{% endif %}
+
+<details class="location-edit"{% if not pool.latitude or not pool.longitude %} open{% endif %}>
+  <summary>{% if pool.latitude and pool.longitude %}Update location{% else %}Set a location (for weather correlation){% endif %}</summary>
+  <form method="post" action="/pools/{{ pool.id }}/location" class="inline-form">
+    <div>
+      <label for="location">Town / city</label>
+      <input type="text" id="location" name="location" placeholder="e.g. Brisbane, Australia"
+        value="{{ pool.location_name or '' }}">
+    </div>
+    <div>
+      <label for="latitude">Latitude</label>
+      <input type="number" step="any" id="latitude" name="latitude"
+        placeholder="optional" value="{{ pool.latitude if pool.latitude is not none else '' }}">
+    </div>
+    <div>
+      <label for="longitude">Longitude</label>
+      <input type="number" step="any" id="longitude" name="longitude"
+        placeholder="optional" value="{{ pool.longitude if pool.longitude is not none else '' }}">
+    </div>
+    <button type="submit" class="secondary">Save location</button>
+  </form>
+</details>
+
 {% if not latest %}
   <div class="card empty">
     <p>No readings yet for this pool.</p>
@@ -34,7 +59,14 @@
       {% else %}
         <span class="tag muted">basic range check</span>
       {% endif %}
+      <form method="post" action="/pools/{{ pool.id }}/advice/refresh" class="advice-refresh">
+        <button type="submit" class="secondary small">↻ Refresh advice</button>
+      </form>
     </div>
+    {% if advice_generated_at %}
+      <p class="muted small">Generated {{ advice_generated_at.strftime("%Y-%m-%d %H:%M UTC") }}.
+        This stays put until you add a reading or refresh.</p>
+    {% endif %}
     {% if assessment.summary %}<p class="summary">{{ assessment.summary }}</p>{% endif %}
 
     <ul class="recs">
@@ -49,12 +81,34 @@
         </li>
       {% endfor %}
     </ul>
+
+    {% if assessment.next_steps %}
+      <div class="next-steps">
+        <h3>Next steps</h3>
+        <ol>
+          {% for step in assessment.next_steps %}<li>{{ step }}</li>{% endfor %}
+        </ol>
+      </div>
+    {% endif %}
+  </section>
+  {% else %}
+  <section class="card assessment">
+    <div class="assessment-head"><h2>Advice</h2></div>
+    <p class="muted">No advice generated yet for this pool.</p>
+    <form method="post" action="/pools/{{ pool.id }}/advice/refresh">
+      <button type="submit" class="primary">Generate advice</button>
+    </form>
   </section>
   {% endif %}
 
   <section class="card">
     <h2>Latest reading</h2>
     <p class="muted small">{{ latest.taken_at.strftime("%Y-%m-%d %H:%M UTC") }} · {{ latest.source.value }}</p>
+    {% if latest.image_path %}
+      <a class="strip-thumb" href="/pools/{{ pool.id }}/readings/{{ latest.id }}/image" target="_blank">
+        <img src="/pools/{{ pool.id }}/readings/{{ latest.id }}/image" alt="Test-strip photo">
+      </a>
+    {% endif %}
     <div class="readings-grid">
       {% set vals = [
         ("pH", latest.ph, ""),
@@ -65,6 +119,7 @@
         ("Calcium", latest.calcium_hardness, " ppm"),
         ("Salt", latest.salt, " ppm"),
         ("ORP", latest.orp, " mV"),
+        ("EC", latest.ec, " µS/cm"),
         ("TDS", latest.tds, " ppm"),
         ("Temp", latest.temperature_c, " °C"),
       ] %}
@@ -84,6 +139,8 @@
         {% if lw.precipitation_mm is not none %} · {{ "%g"|format(lw.precipitation_mm) }} mm rain{% endif %}
         {% if lw.uv_index_max is not none %} · UV {{ "%g"|format(lw.uv_index_max) }}{% endif %}
       </p>
+    {% elif not pool.latitude or not pool.longitude %}
+      <p class="muted small">📍 Add a location to this pool to correlate readings with the weather.</p>
     {% endif %}
   </section>
 
@@ -92,8 +149,9 @@
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>When</th><th>Source</th><th>pH</th><th>Free Cl</th><th>Alk</th>
-          <th>CYA</th><th>Salt</th><th>ORP</th><th>Temp</th><th>Weather</th>
+          <th>When</th><th>Source</th><th>pH</th><th>Free Cl</th><th>Total Cl</th>
+          <th>Alk</th><th>CYA</th><th>Calcium</th><th>Salt</th><th>ORP</th>
+          <th>EC</th><th>TDS</th><th>Temp</th><th>Weather</th>
         </tr></thead>
         <tbody>
           {% for r in readings %}
@@ -103,10 +161,14 @@
             <td>{{ r.source.value }}</td>
             <td>{{ "%g"|format(r.ph) if r.ph is not none else "–" }}</td>
             <td>{{ "%g"|format(r.free_chlorine) if r.free_chlorine is not none else "–" }}</td>
+            <td>{{ "%g"|format(r.total_chlorine) if r.total_chlorine is not none else "–" }}</td>
             <td>{{ "%g"|format(r.total_alkalinity) if r.total_alkalinity is not none else "–" }}</td>
             <td>{{ "%g"|format(r.cyanuric_acid) if r.cyanuric_acid is not none else "–" }}</td>
+            <td>{{ "%g"|format(r.calcium_hardness) if r.calcium_hardness is not none else "–" }}</td>
             <td>{{ "%g"|format(r.salt) if r.salt is not none else "–" }}</td>
             <td>{{ "%g"|format(r.orp) if r.orp is not none else "–" }}</td>
+            <td>{{ "%g"|format(r.ec) if r.ec is not none else "–" }}</td>
+            <td>{{ "%g"|format(r.tds) if r.tds is not none else "–" }}</td>
             <td>{{ "%g"|format(r.temperature_c) if r.temperature_c is not none else "–" }}</td>
             <td class="weather-cell">
               {%- if w -%}

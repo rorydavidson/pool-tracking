@@ -47,6 +47,8 @@ class Recommendation:
 class Assessment:
     summary: str = ""
     recommendations: list[Recommendation] = field(default_factory=list)
+    # Ordered, concrete next steps to rebalance the water (most urgent first).
+    next_steps: list[str] = field(default_factory=list)
     # Where the advice came from: "claude" or "fallback".
     source: str = "fallback"
 

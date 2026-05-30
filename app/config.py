@@ -44,6 +44,11 @@ class Settings(BaseSettings):
         return self.data_dir / "outbox"
 
     @property
+    def uploads_dir(self) -> Path:
+        """Where user-uploaded test-strip photos are stored."""
+        return self.data_dir / "uploads"
+
+    @property
     def email_enabled(self) -> bool:
         """True when a real SMTP server is configured."""
         return bool(self.smtp_host)
@@ -51,6 +56,7 @@ class Settings(BaseSettings):
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
+        self.uploads_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache

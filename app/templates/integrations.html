@@ -50,8 +50,12 @@
         <label for="pw_{{ provider.value }}">Password</label>
         <input type="password" id="pw_{{ provider.value }}" name="password" required>
         {% if provider.value == "aiper" %}
-          <label for="url_{{ provider.value }}">API base URL (optional)</label>
-          <input type="text" id="url_{{ provider.value }}" name="base_url" placeholder="https://api.aiper.com">
+          <label for="region_{{ provider.value }}">Region</label>
+          <select id="region_{{ provider.value }}" name="region">
+            <option value="eu">Europe</option>
+            <option value="us">Americas</option>
+            <option value="asia">Asia</option>
+          </select>
         {% endif %}
         <button type="submit" class="primary">Connect</button>
       </form>

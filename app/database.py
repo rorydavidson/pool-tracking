@@ -41,6 +41,11 @@ _LIGHTWEIGHT_MIGRATIONS = {
         "location_name": "VARCHAR(160)",
         "latitude": "FLOAT",
         "longitude": "FLOAT",
+        "notes": "TEXT",
+    },
+    "readings": {
+        "ec": "FLOAT",
+        "image_path": "VARCHAR(255)",
     },
 }
 

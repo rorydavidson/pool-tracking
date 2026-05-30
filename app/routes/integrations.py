@@ -57,7 +57,7 @@ def connect(
     provider: str,
     email: str = Form(...),
     password: str = Form(...),
-    base_url: str = Form(""),
+    region: str = Form("eu"),
     user=Depends(auth.current_user),
     db: Session = Depends(get_db),
 ):
@@ -66,8 +66,8 @@ def connect(
     prov = Provider(provider)
 
     payload = {"email": email.strip(), "password": password}
-    if base_url.strip():
-        payload["base_url"] = base_url.strip()
+    if region.strip():
+        payload["region"] = region.strip()
 
     # Verify the credentials before saving so we don't store bad logins silently.
     try:
@@ -177,6 +177,7 @@ def _store_measurements(
                 calcium_hardness=m.calcium_hardness,
                 salt=m.salt,
                 orp=m.orp,
+                ec=m.ec,
                 tds=m.tds,
                 temperature_c=m.temperature_c,
             )

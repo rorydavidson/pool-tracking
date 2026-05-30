@@ -96,6 +96,11 @@ def weather_for_dates(
     Returns an empty dict if the pool has no location set.
     """
     if pool.latitude is None or pool.longitude is None or not dates:
+        if not dates:
+            return {}
+        logger.info(
+            "Skipping weather for pool %s: no location set (lat/lon missing)", pool.id
+        )
         return {}
 
     lat, lon = _round(pool.latitude), _round(pool.longitude)
@@ -113,6 +118,11 @@ def weather_for_dates(
     missing = sorted(wanted - set(found))
     if missing:
         fetched = _fetch_range(lat, lon, missing)
+        if not fetched:
+            logger.info(
+                "Weather fetch returned no days for pool %s (%s, %s) dates=%s",
+                pool.id, lat, lon, missing,
+            )
         for iso, summary in fetched.items():
             db.add(
                 WeatherDay(

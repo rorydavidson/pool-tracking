@@ -32,6 +32,7 @@ class DeviceMeasurement:
     calcium_hardness: float | None = None  # ppm
     salt: float | None = None  # ppm
     orp: float | None = None  # mV
+    ec: float | None = None  # µS/cm
     tds: float | None = None  # ppm
     temperature_c: float | None = None
 

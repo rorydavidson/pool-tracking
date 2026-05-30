@@ -92,11 +92,17 @@ class Pool(Base):
     location_name: Mapped[str | None] = mapped_column(String(160))
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
+    # Free-text context the owner can add (e.g. "recently shocked", "near oak
+    # trees"). Passed to the advice generator as extra context.
+    notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     owner: Mapped["User"] = relationship(back_populates="pools")
     readings: Mapped[list["Reading"]] = relationship(
         back_populates="pool", cascade="all, delete-orphan", order_by="Reading.taken_at.desc()"
+    )
+    advice: Mapped["PoolAdvice | None"] = relationship(
+        back_populates="pool", cascade="all, delete-orphan", uselist=False
     )
 
 
@@ -122,11 +128,14 @@ class Reading(Base):
     calcium_hardness: Mapped[float | None] = mapped_column(Float)  # ppm
     salt: Mapped[float | None] = mapped_column(Float)  # ppm
     orp: Mapped[float | None] = mapped_column(Float)  # mV
+    ec: Mapped[float | None] = mapped_column(Float)  # µS/cm (electrical conductivity)
     tds: Mapped[float | None] = mapped_column(Float)  # ppm
     temperature_c: Mapped[float | None] = mapped_column(Float)
 
     # The device serial/UUID this reading came from, if any.
     external_id: Mapped[str | None] = mapped_column(String(128))
+    # Filename (under the uploads dir) of a test-strip photo, if one was used.
+    image_path: Mapped[str | None] = mapped_column(String(255))
 
     pool: Mapped["Pool"] = relationship(back_populates="readings")
 
@@ -134,6 +143,33 @@ class Reading(Base):
         # Avoid storing the same device measurement twice on sync.
         UniqueConstraint("pool_id", "source", "external_id", "taken_at", name="uq_reading_dedupe"),
     )
+
+
+class PoolAdvice(Base):
+    """The most recently generated advice for a pool.
+
+    Advice is expensive to generate (a Claude call), so we persist it and only
+    regenerate on an explicit trigger: a new reading, or the owner pressing
+    "Refresh". Page views read this row rather than calling the API.
+
+    The full assessment (summary, source, recommendations) is stored as a JSON
+    blob in :attr:`payload`; see ``advice.serialise_assessment``.
+    """
+
+    __tablename__ = "pool_advice"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pool_id: Mapped[int] = mapped_column(
+        ForeignKey("pools.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    # The reading this advice assessed, for "based on your test from ..." context.
+    reading_id: Mapped[int | None] = mapped_column(
+        ForeignKey("readings.id", ondelete="SET NULL")
+    )
+    payload: Mapped[str] = mapped_column(Text, nullable=False)  # serialised Assessment
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    pool: Mapped["Pool"] = relationship(back_populates="advice")
 
 
 class ProviderCredential(Base):

@@ -51,6 +51,12 @@ are safe.
 plus a one- or two-sentence overall summary. Be concise and practical. Do not \
 invent readings that were not provided; if a key parameter is missing, you may \
 note that it should be tested.
+- Also produce a short, ordered "next steps" to-do list: the concrete actions \
+the owner should take to bring the water into balance, in the order they should \
+do them (adjust alkalinity before pH, etc.). Each step is one clear action with \
+the product and dose where relevant, what to do (pump running, add to water, add \
+gradually), and when to re-test. If the water is already balanced, give at most \
+one light maintenance step or leave it empty.
 
 Reference target ranges for a typical residential pool (use judgement to adapt \
 to the specific pool): pH 7.2-7.6; Total Alkalinity 80-120 ppm; Free Chlorine \
@@ -78,6 +84,15 @@ class AdviceRecommendation(BaseModel):
 class AdviceResult(BaseModel):
     summary: str = Field(description="A one or two sentence overall assessment of the water.")
     recommendations: list[AdviceRecommendation]
+    next_steps: list[str] = Field(
+        default_factory=list,
+        description=(
+            "An ordered, practical to-do list to rebalance THIS pool, most urgent "
+            "first. Each step is a single concrete action with the product and "
+            "dose where relevant, plus when to re-test. Empty if the water is "
+            "already balanced."
+        ),
+    )
 
 
 def _severity(value: str) -> Severity:
@@ -97,6 +112,7 @@ def _reading_to_dict(r: Reading, weather: dict | None = None) -> dict:
         "calcium_hardness": "calcium_hardness_ppm",
         "salt": "salt_ppm",
         "orp": "orp_mv",
+        "ec": "ec_us_cm",
         "tds": "tds_ppm",
         "temperature_c": "temperature_c",
     }
@@ -119,7 +135,9 @@ def _reading_to_dict(r: Reading, weather: dict | None = None) -> dict:
     return out
 
 
-def _build_pool_payload(pool: Pool, readings: list[Reading], weather: dict | None) -> str:
+def _build_pool_payload(
+    pool: Pool, readings: list[Reading], weather: dict | None, notes: str | None
+) -> str:
     import json
 
     payload = {
@@ -132,6 +150,7 @@ def _build_pool_payload(pool: Pool, readings: list[Reading], weather: dict | Non
             "setting": "indoor" if pool.indoor else "outdoor",
             "location": pool.location_name,
         },
+        "owner_notes": notes or None,
         "latest_reading": _reading_to_dict(readings[0], weather) if readings else None,
         "recent_history": [_reading_to_dict(r, weather) for r in readings[1:8]],
     }
@@ -139,14 +158,18 @@ def _build_pool_payload(pool: Pool, readings: list[Reading], weather: dict | Non
 
 
 def generate_advice(
-    pool: Pool, readings: list[Reading], weather: dict | None = None
+    pool: Pool,
+    readings: list[Reading],
+    weather: dict | None = None,
+    notes: str | None = None,
 ) -> Assessment:
     """Return an :class:`Assessment` for the pool's latest reading.
 
     ``readings`` should be ordered newest-first; ``readings[0]`` is assessed,
     earlier ones are supplied as trend context. ``weather`` optionally maps ISO
     dates to :class:`~app.weather.WeatherSummary` so Claude can correlate the
-    readings with the weather on those days.
+    readings with the weather on those days. ``notes`` is free-text context the
+    owner has supplied about the pool (e.g. recent treatments, surroundings).
     """
     settings = get_settings()
     if not readings:
@@ -156,7 +179,7 @@ def generate_advice(
         return chemistry.fallback_assessment(pool, readings[0])
 
     try:
-        return _generate_with_claude(pool, readings, weather, settings)
+        return _generate_with_claude(pool, readings, weather, notes, settings)
     except Exception:  # noqa: BLE001 - never let advice failure break the page
         logger.exception("Claude advice generation failed; using fallback")
         a = chemistry.fallback_assessment(pool, readings[0])
@@ -165,7 +188,7 @@ def generate_advice(
 
 
 def _generate_with_claude(
-    pool: Pool, readings: list[Reading], weather: dict | None, settings
+    pool: Pool, readings: list[Reading], weather: dict | None, notes: str | None, settings
 ) -> Assessment:
     import anthropic
 
@@ -173,7 +196,8 @@ def _generate_with_claude(
     user_content = (
         "Assess this pool's water and give dosing advice for the latest reading. "
         "Where weather is included, note any links between the weather and the "
-        "readings.\n\n" + _build_pool_payload(pool, readings, weather)
+        "readings. Take the owner's notes into account where relevant.\n\n"
+        + _build_pool_payload(pool, readings, weather, notes)
     )
 
     response = client.messages.parse(
@@ -193,7 +217,9 @@ def _generate_with_claude(
     )
 
     result = response.parsed_output
-    assessment = Assessment(summary=result.summary, source="claude")
+    assessment = Assessment(
+        summary=result.summary, source="claude", next_steps=list(result.next_steps)
+    )
     for rec in result.recommendations:
         assessment.recommendations.append(
             Recommendation(
@@ -201,6 +227,50 @@ def _generate_with_claude(
                 severity=_severity(rec.severity),
                 message=rec.message,
                 action=rec.action,
+            )
+        )
+    return assessment
+
+
+def serialise_assessment(assessment: Assessment) -> str:
+    """Serialise an :class:`Assessment` to a JSON string for persistence."""
+    import json
+
+    return json.dumps(
+        {
+            "summary": assessment.summary,
+            "source": assessment.source,
+            "next_steps": list(assessment.next_steps),
+            "recommendations": [
+                {
+                    "parameter": r.parameter,
+                    "severity": r.severity.value,
+                    "message": r.message,
+                    "action": r.action,
+                }
+                for r in assessment.recommendations
+            ],
+        }
+    )
+
+
+def deserialise_assessment(payload: str) -> Assessment:
+    """Rebuild an :class:`Assessment` from a :func:`serialise_assessment` blob."""
+    import json
+
+    data = json.loads(payload)
+    assessment = Assessment(
+        summary=data.get("summary", ""),
+        source=data.get("source", "fallback"),
+        next_steps=list(data.get("next_steps", [])),
+    )
+    for rec in data.get("recommendations", []):
+        assessment.recommendations.append(
+            Recommendation(
+                parameter=rec.get("parameter", ""),
+                severity=_severity(rec.get("severity", "warning")),
+                message=rec.get("message", ""),
+                action=rec.get("action"),
             )
         )
     return assessment
