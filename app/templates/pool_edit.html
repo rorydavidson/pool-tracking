@@ -7,9 +7,17 @@
 </div>
 
 <div class="card narrow">
-  <form method="post" action="/pools/{{ pool.id }}/edit">
+  <form method="post" action="/pools/{{ pool.id }}/edit" enctype="multipart/form-data">
     <label for="name">Pool name</label>
     <input type="text" id="name" name="name" value="{{ pool.name }}" required>
+
+    <label for="photo">Cover photo</label>
+    {% if pool.image_path %}
+      <img class="photo-preview" src="/pools/{{ pool.id }}/image" alt="Current pool photo">
+      <label class="checkbox"><input type="checkbox" name="remove_photo" value="true"> Remove current photo</label>
+    {% endif %}
+    <input type="file" id="photo" name="photo" accept="image/*">
+    <p class="muted small">A nice photo of your pool, shown at the top of its page.</p>
 
     <label for="volume">Water volume (litres)</label>
     <input type="number" step="any" min="0" id="volume" name="volume" value="{{ '%g'|format(pool.volume_litres) }}" required>

@@ -48,6 +48,7 @@ _LIGHTWEIGHT_MIGRATIONS = {
         "width_m": "FLOAT",
         "avg_depth_m": "FLOAT",
         "timezone": "VARCHAR(64)",
+        "image_path": "VARCHAR(255)",
     },
     "readings": {
         "ec": "FLOAT",
