@@ -189,7 +189,14 @@ th { color: var(--muted); font-weight: 600; }
 .import-form { display: flex; align-items: center; gap: 0.4rem; margin: 0; }
 .import-form input[type="file"] { width: auto; max-width: 180px; font-size: 0.8rem; padding: 0.25rem; }
 
-.row-action { text-align: center; padding: 0.2rem 0.4rem; }
+/* Pin the delete action to the left so it stays visible on wide, scrolling tables. */
+.data-table th:first-child,
+.data-table td:first-child {
+  position: sticky; left: 0; background: var(--card); z-index: 1;
+}
+.data-table tbody tr:hover td:first-child { background: #fafcfd; }
+
+.row-action { text-align: center; padding: 0.2rem 0.3rem; width: 1%; }
 .row-action form { margin: 0; }
 .icon-delete {
   background: none; border: none; color: var(--muted); cursor: pointer;
