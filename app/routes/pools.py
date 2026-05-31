@@ -417,6 +417,44 @@ def _group_by_week(readings: list[Reading], tzname: str | None) -> list[dict]:
     return weeks
 
 
+@router.get("/pools/{pool_id}/forecast", response_class=HTMLResponse)
+def pool_forecast(
+    request: Request,
+    pool_id: int,
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    """Render the forecast dialog body (today + the next days). Lazy-loaded.
+
+    Fetched only when the owner opens the weather dialog, so a normal pool page
+    view makes no forecast call and no coordinates leave the server otherwise.
+    """
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+    if pool.latitude is None or pool.longitude is None:
+        return HTMLResponse('<p class="muted">No location set for this pool.</p>')
+
+    days = []
+    for idx, summary in enumerate(weather.forecast(pool.latitude, pool.longitude, days=6)):
+        try:
+            d = datetime.fromisoformat(summary.date).date()
+        except ValueError:
+            continue
+        days.append({
+            "summary": summary,
+            "label": d.strftime("%a %d %b"),
+            "weekday": d.strftime("%A"),
+            "is_today": idx == 0,
+        })
+
+    return templates.TemplateResponse(
+        request, "forecast_dialog.html", {"pool": pool, "days": days}
+    )
+
+
 @router.get("/pools/{pool_id}/readings/new", response_class=HTMLResponse)
 def new_reading_form(
     request: Request,

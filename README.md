@@ -34,8 +34,9 @@ you can spot what is driving changes in your pool.
   **type, shape and dimensions** (length, width, average depth). A water-volume
   estimate is calculated from the dimensions as a cross-check.
 - **Weather correlation.** Historical daily weather (temperature, rain, UV) for the
-  pool's location is fetched from Open-Meteo, shown next to each reading, and fed
-  to Claude to explain weather-driven trends.
+  pool's location is fetched from Open-Meteo, shown on a weather card next to each
+  reading, and fed to Claude to explain weather-driven trends. The card opens a
+  **5-day forecast** dialog (fetched server-side, only when you open it).
 - **Local time.** Reading times are shown in the pool's own timezone, derived from
   its location.
 - **Import / export / snapshot.**

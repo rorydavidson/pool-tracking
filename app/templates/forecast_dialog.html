@@ -1,0 +1,37 @@
+{# Forecast dialog body, lazy-loaded into the <dialog> on the pool page. #}
+{% if not days %}
+  <p class="muted">Forecast unavailable just now. Try again shortly.</p>
+{% else %}
+  {% set today = days[0] %}
+  <div class="fc-today">
+    <span class="fc-today-icon">{{ weather_icon(today.summary.weather_code) }}</span>
+    <div class="fc-today-main">
+      <span class="fc-today-desc">{{ today.summary.description or "Today" }}</span>
+      <span class="fc-today-temps">
+        {% if today.summary.temp_max_c is not none %}{{ "%g"|format(today.summary.temp_max_c) }}°{% endif %}
+        {% if today.summary.temp_min_c is not none %}<span class="muted">/ {{ "%g"|format(today.summary.temp_min_c) }}°</span>{% endif %}
+      </span>
+      <span class="fc-today-meta muted small">
+        {% if today.summary.precipitation_mm is not none %}☔ {{ "%g"|format(today.summary.precipitation_mm) }} mm{% endif %}
+        {% if today.summary.uv_index_max is not none %} · ☀️ UV {{ "%g"|format(today.summary.uv_index_max) }}{% endif %}
+        {% if today.summary.wind_max_kmh is not none %} · 💨 {{ "%g"|format(today.summary.wind_max_kmh) }} km/h{% endif %}
+      </span>
+    </div>
+  </div>
+
+  <div class="fc-days">
+    {% for day in days[1:] %}
+      <div class="fc-day">
+        <span class="fc-day-name" title="{{ day.label }}">{{ day.label.split(" ")[0] }}</span>
+        <span class="fc-day-icon" title="{{ day.summary.description }}">{{ weather_icon(day.summary.weather_code) }}</span>
+        <span class="fc-day-temp">
+          {% if day.summary.temp_max_c is not none %}{{ "%g"|format(day.summary.temp_max_c) }}°{% endif %}
+          {% if day.summary.temp_min_c is not none %}<span class="muted">{{ "%g"|format(day.summary.temp_min_c) }}°</span>{% endif %}
+        </span>
+        <span class="fc-day-rain muted small">
+          {% if day.summary.precipitation_mm is not none and day.summary.precipitation_mm > 0 %}☔ {{ "%g"|format(day.summary.precipitation_mm) }}mm{% endif %}
+        </span>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

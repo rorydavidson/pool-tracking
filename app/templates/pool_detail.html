@@ -78,13 +78,27 @@
       </div>
       {% set lw = weather.get(latest.taken_at.date().isoformat()) %}
       {% if lw %}
-        <p class="weather-line">🌤️ Weather that day:
-          {% if lw.description %}{{ lw.description }}, {% endif %}
-          {% if lw.temp_max_c is not none %}{{ "%g"|format(lw.temp_max_c) }}°C high{% endif %}
-          {% if lw.temp_min_c is not none %} / {{ "%g"|format(lw.temp_min_c) }}°C low{% endif %}
-          {% if lw.precipitation_mm is not none %} · {{ "%g"|format(lw.precipitation_mm) }} mm rain{% endif %}
-          {% if lw.uv_index_max is not none %} · UV {{ "%g"|format(lw.uv_index_max) }}{% endif %}
-        </p>
+        <button type="button" class="weather-card"
+          {% if pool.latitude is not none and pool.longitude is not none %}
+            data-forecast-url="/pools/{{ pool.id }}/forecast"
+          {% else %}disabled{% endif %}>
+          <span class="weather-icon" aria-hidden="true">{{ weather_icon(lw.weather_code) }}</span>
+          <span class="weather-text">
+            <span class="weather-desc">{{ lw.description or "Weather that day" }}</span>
+            <span class="weather-temps">
+              {% if lw.temp_max_c is not none %}{{ "%g"|format(lw.temp_max_c) }}°<span class="muted small">high</span>{% endif %}
+              {% if lw.temp_min_c is not none %} <span class="muted">/ {{ "%g"|format(lw.temp_min_c) }}°<span class="muted small">low</span></span>{% endif %}
+            </span>
+            <span class="weather-extra muted small">
+              {% if lw.precipitation_mm is not none %}☔ {{ "%g"|format(lw.precipitation_mm) }} mm{% endif %}
+              {% if lw.uv_index_max is not none %} · ☀️ UV {{ "%g"|format(lw.uv_index_max) }}{% endif %}
+              {% if lw.wind_max_kmh is not none %} · 💨 {{ "%g"|format(lw.wind_max_kmh) }} km/h{% endif %}
+            </span>
+          </span>
+          {% if pool.latitude is not none and pool.longitude is not none %}
+            <span class="weather-cta">5-day forecast →</span>
+          {% endif %}
+        </button>
       {% elif not pool.latitude or not pool.longitude %}
         <p class="muted small">📍 Add a location to this pool to correlate readings with the weather.</p>
       {% endif %}
@@ -110,6 +124,7 @@
         {% for rec in assessment.sorted() %}
           <article class="rec-card sev-{{ severity_class(rec.severity) }}">
             <header class="rec-card-head">
+              <span class="rec-icon" aria-hidden="true">{{ param_icon(rec.parameter) }}</span>
               <strong class="rec-param">{{ rec.parameter }}</strong>
               <span class="badge {{ severity_class(rec.severity) }}">{{ rec.severity.value }}</span>
             </header>
@@ -216,4 +231,35 @@
       onsubmit="return confirm('Delete this pool and all its readings?');">
   <button type="submit" class="danger-link">Delete pool</button>
 </form>
+
+<dialog id="forecast-dialog" class="forecast-dialog">
+  <div class="forecast-dialog-head">
+    <h2>5-day forecast{% if pool.location_name %} · {{ pool.location_name }}{% endif %}</h2>
+    <button type="button" class="dialog-close" data-close aria-label="Close">✕</button>
+  </div>
+  <div id="forecast-body"><p class="muted">Loading…</p></div>
+</dialog>
+<script>
+(function () {
+  var dlg = document.getElementById('forecast-dialog');
+  if (!dlg || typeof dlg.showModal !== 'function') return;
+  var body = document.getElementById('forecast-body');
+  document.querySelectorAll('.weather-card[data-forecast-url]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      body.innerHTML = '<p class="muted">Loading…</p>';
+      dlg.showModal();
+      fetch(btn.getAttribute('data-forecast-url'), { credentials: 'same-origin' })
+        .then(function (r) { return r.text(); })
+        .then(function (html) { body.innerHTML = html; })
+        .catch(function () {
+          body.innerHTML = '<p class="alert critical inline">Could not load the forecast.</p>';
+        });
+    });
+  });
+  dlg.querySelectorAll('[data-close]').forEach(function (b) {
+    b.addEventListener('click', function () { dlg.close(); });
+  });
+  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+})();
+</script>
 {% endblock %}

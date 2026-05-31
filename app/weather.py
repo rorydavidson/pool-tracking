@@ -103,6 +103,52 @@ def timezone_for(lat: float, lon: float) -> str | None:
     return tz if isinstance(tz, str) and tz else None
 
 
+def forecast(lat: float, lon: float, days: int = 6) -> list[WeatherSummary]:
+    """Return the daily forecast (today first) for the next ``days`` days.
+
+    Not cached: the forecast for upcoming days changes through the day, and it's
+    only fetched when the owner opens the forecast dialog. Returns an empty list
+    on any error so the caller can degrade gracefully.
+    """
+    try:
+        resp = httpx.get(
+            FORECAST_URL,
+            params={
+                "latitude": lat, "longitude": lon,
+                "daily": _DAILY_VARS, "timezone": "auto",
+                "forecast_days": max(1, min(16, days)),
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        daily = resp.json().get("daily") or {}
+    except (httpx.HTTPError, ValueError):
+        logger.warning("Weather forecast failed for (%s, %s)", lat, lon)
+        return []
+
+    times = daily.get("time") or []
+    out: list[WeatherSummary] = []
+    for i, iso in enumerate(times):
+
+        def _at(key: str):
+            seq = daily.get(key) or []
+            return seq[i] if i < len(seq) else None
+
+        code = _at("weathercode")
+        out.append(
+            WeatherSummary(
+                date=iso,
+                temp_max_c=_at("temperature_2m_max"),
+                temp_min_c=_at("temperature_2m_min"),
+                precipitation_mm=_at("precipitation_sum"),
+                uv_index_max=_at("uv_index_max"),
+                wind_max_kmh=_at("windspeed_10m_max"),
+                weather_code=int(code) if code is not None else None,
+            )
+        )
+    return out
+
+
 def _round(coord: float) -> float:
     return round(coord, 2)  # ~1 km granularity for cache reuse
 
