@@ -115,13 +115,23 @@ TARGET_REFERENCE = {
 # Used only when Claude is unavailable (no ANTHROPIC_API_KEY, or an API error).
 # Intentionally simple: flag out-of-range parameters without dosing maths.
 
-def fallback_assessment(pool: Pool, reading: Reading) -> Assessment:
+def fallback_assessment(
+    pool: Pool, reading: Reading, reason: str | None = None
+) -> Assessment:
+    """Deterministic range-check assessment used when Claude is unavailable.
+
+    ``reason`` explains *why* AI advice is unavailable so the summary is honest:
+    pass ``None`` (the default) when no API key is configured, or a short message
+    when a configured key's API call failed.
+    """
+    if reason is None:
+        reason = (
+            "AI advice is unavailable (no ANTHROPIC_API_KEY configured). Set an API "
+            "key for tailored, dosed recommendations."
+        )
     a = Assessment(
         source="fallback",
-        summary=(
-            "AI advice is unavailable (no ANTHROPIC_API_KEY configured), so this is a "
-            "basic range check. Set an API key for tailored, dosed recommendations."
-        ),
+        summary=f"{reason} For now, here is a basic in-range / out-of-range check.",
     )
 
     def check(name: str, value: float | None, rng: Range, unit: str = "") -> None:

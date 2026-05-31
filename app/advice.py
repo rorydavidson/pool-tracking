@@ -107,6 +107,19 @@ class AdviceResult(BaseModel):
     )
 
 
+def _short_error(exc: Exception) -> str:
+    """A short, single-line description of an exception for the UI.
+
+    Anthropic SDK errors often carry the API's own message (e.g. a deprecated
+    parameter), which is the most useful thing to show. Trimmed and flattened so
+    it stays on one line and can't dump a huge JSON body into the page.
+    """
+    text = " ".join(str(exc).split())
+    if len(text) > 160:
+        text = text[:157] + "…"
+    return text or exc.__class__.__name__
+
+
 def _severity(value: str) -> Severity:
     try:
         return Severity(value.strip().lower())
@@ -238,11 +251,16 @@ def generate_advice(
 
     try:
         return _generate_with_claude(pool, readings, weather, notes, settings)
-    except Exception:  # noqa: BLE001 - never let advice failure break the page
+    except Exception as exc:  # noqa: BLE001 - never let advice failure break the page
         logger.exception("Claude advice generation failed; using fallback")
-        a = chemistry.fallback_assessment(pool, readings[0])
-        a.summary = "AI advice was temporarily unavailable; showing a basic range check. " + a.summary
-        return a
+        return chemistry.fallback_assessment(
+            pool,
+            readings[0],
+            reason=(
+                "AI advice could not be generated just now (the Claude request "
+                f"failed: {_short_error(exc)}). Press Refresh to try again."
+            ),
+        )
 
 
 def _generate_with_claude(
