@@ -258,13 +258,14 @@ def _generate_with_claude(
         + _build_pool_payload(pool, readings, weather, notes)
     )
 
-    # temperature=0 (greedy decoding) for repeatability: the owner expects the
-    # same advice for the same water. Extended thinking forces temperature=1, so
-    # we don't use it here — reasoning effort still governs depth.
+    # This model deprecates `temperature`, so we can't force greedy decoding.
+    # Repeatability instead comes from the system prompt (fixed target ranges and
+    # standard dosing formulas) and from not using adaptive extended thinking,
+    # whose variable reasoning made advice drift between runs. Reasoning depth is
+    # governed by `effort`.
     response = client.messages.parse(
         model=settings.advice_model,
         max_tokens=4000,
-        temperature=0,
         output_config={"effort": settings.advice_effort},
         system=[
             {
