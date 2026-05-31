@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import auth, chemistry, weather
-from ..advice import deserialise_assessment, generate_advice, serialise_assessment
+from ..advice import deserialise_assessment, regenerate_pool_advice
 from ..charts import Point, line_chart
 from ..config import get_settings
 from ..database import get_db
@@ -84,6 +84,18 @@ def _get_owned_pool(db: Session, user_id: int, pool_id: int) -> Pool | None:
     return db.scalar(select(Pool).where(Pool.id == pool_id, Pool.user_id == user_id))
 
 
+def _local_date(value: datetime, tzname: str | None):
+    """Calendar date of ``value`` in ``tzname`` (UTC fallback)."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    if tzname:
+        try:
+            return value.astimezone(ZoneInfo(tzname)).date()
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return value.astimezone(timezone.utc).date()
+
+
 def _weather_for_readings(db: Session, pool: Pool, readings: list[Reading]) -> dict:
     """Best-effort weather lookup for the dates in ``readings``."""
     if not readings:
@@ -98,27 +110,11 @@ def _weather_for_readings(db: Session, pool: Pool, readings: list[Reading]) -> d
 def _regenerate_advice(db: Session, pool: Pool) -> None:
     """Generate fresh advice for ``pool`` and persist it (upserting one row).
 
-    This is the only place that calls the (expensive) advice generator on a
-    user action — a new reading or a manual refresh. Plain page views read the
-    stored row instead.
+    Called on a user action — a new reading or a manual refresh — and shared
+    with the twice-daily scheduler via ``advice.regenerate_pool_advice``. Plain
+    page views read the stored row instead.
     """
-    readings = db.scalars(
-        select(Reading).where(Reading.pool_id == pool.id).order_by(Reading.taken_at.desc())
-    ).all()
-    if not readings:
-        return
-
-    weather_by_date = _weather_for_readings(db, pool, list(readings))
-    assessment = generate_advice(pool, list(readings), weather_by_date, notes=pool.notes)
-    payload = serialise_assessment(assessment)
-
-    if pool.advice is None:
-        db.add(PoolAdvice(pool_id=pool.id, reading_id=readings[0].id, payload=payload))
-    else:
-        pool.advice.payload = payload
-        pool.advice.reading_id = readings[0].id
-        pool.advice.generated_at = datetime.now(timezone.utc)
-    db.commit()
+    regenerate_pool_advice(db, pool)
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -270,12 +266,18 @@ def pool_detail(
     # tiles can be colour-coded.
     metric_status = _metric_status(pool, list(readings))
 
+    # The pool page shows only today's readings (pool-local date); the full
+    # history lives on the analysis page, grouped by week.
+    today = _local_date(datetime.now(timezone.utc), pool.timezone)
+    todays_readings = [r for r in readings if _local_date(r.taken_at, pool.timezone) == today]
+
     return templates.TemplateResponse(
         request,
         "pool_detail.html",
         {"user": user,
             "pool": pool,
             "readings": readings,
+            "todays_readings": todays_readings,
             "latest": readings[0] if readings else None,
             "assessment": assessment,
             "advice_generated_at": advice_generated_at,
@@ -376,11 +378,43 @@ def pool_analysis(
             }
         )
 
+    # Full history, newest-first, grouped into weeks (Mon–Sun, pool-local) for an
+    # expandable table. The most recent week is rendered open.
+    weather_by_date = _weather_for_readings(db, pool, list(readings))
+    weeks = _group_by_week(list(reversed(readings)), pool.timezone)
+
     return templates.TemplateResponse(
         request,
         "analysis.html",
-        {"user": user, "pool": pool, "charts": charts, "reading_count": len(readings)},
+        {
+            "user": user,
+            "pool": pool,
+            "charts": charts,
+            "reading_count": len(readings),
+            "weeks": weeks,
+            "weather": weather_by_date,
+        },
     )
+
+
+def _group_by_week(readings: list[Reading], tzname: str | None) -> list[dict]:
+    """Group newest-first ``readings`` into ISO weeks, most recent week first."""
+    weeks: list[dict] = []
+    for r in readings:
+        d = _local_date(r.taken_at, tzname)
+        iso = d.isocalendar()  # (ISO year, ISO week, ISO weekday 1=Mon)
+        key = (iso[0], iso[1])
+        if not weeks or weeks[-1]["key"] != key:
+            monday = d - timedelta(days=iso[2] - 1)
+            weeks.append({
+                "key": key,
+                "label": f"Week {iso[1]}, {iso[0]}",
+                "start": monday,
+                "end": monday + timedelta(days=6),
+                "readings": [],
+            })
+        weeks[-1]["readings"].append(r)
+    return weeks
 
 
 @router.get("/pools/{pool_id}/readings/new", response_class=HTMLResponse)

@@ -33,5 +33,59 @@
       </section>
     {% endfor %}
   </div>
+
+  {# ---- Full history, grouped by week ------------------------------------- #}
+  <section class="panel history-panel">
+    <header class="panel-head">
+      <div class="panel-title"><span class="panel-dot accent"></span><h2>Full history</h2>
+        <span class="muted small">{{ reading_count }} reading(s) over {{ weeks|length }} week(s)</span>
+      </div>
+    </header>
+    {% for week in weeks %}
+      <details class="week" {{ 'open' if loop.first }}>
+        <summary>
+          <span class="week-label">{{ week.label }}</span>
+          <span class="muted small">{{ week.start.strftime("%d %b") }} – {{ week.end.strftime("%d %b") }}
+            · {{ week.readings|length }} reading(s)</span>
+        </summary>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>When</th><th>Source</th><th>pH</th><th>Free Cl</th><th>Total Cl</th>
+              <th>Alk</th><th>CYA</th><th>Calcium</th><th>Salt</th><th>ORP</th>
+              <th>EC</th><th>TDS</th><th>Temp</th><th>Weather</th>
+            </tr></thead>
+            <tbody>
+              {% for r in week.readings %}
+              {% set w = weather.get(r.taken_at.date().isoformat()) %}
+              <tr>
+                <td>{{ fmt_local(r.taken_at, pool.timezone, "%a %d %b · %H:%M") }}</td>
+                <td>{{ r.source.value }}</td>
+                <td>{{ "%g"|format(r.ph) if r.ph is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.free_chlorine) if r.free_chlorine is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.total_chlorine) if r.total_chlorine is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.total_alkalinity) if r.total_alkalinity is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.cyanuric_acid) if r.cyanuric_acid is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.calcium_hardness) if r.calcium_hardness is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.salt) if r.salt is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.orp) if r.orp is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.ec) if r.ec is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.tds) if r.tds is not none else "–" }}</td>
+                <td>{{ "%g"|format(r.temperature_c) if r.temperature_c is not none else "–" }}</td>
+                <td class="weather-cell">
+                  {%- if w -%}
+                    {%- if w.temp_max_c is not none %}{{ "%g"|format(w.temp_max_c) }}°{% endif %}
+                    {%- if w.precipitation_mm is not none and w.precipitation_mm > 0 %} ☔{{ "%g"|format(w.precipitation_mm) }}mm{% endif %}
+                    {%- if w.description %} {{ w.description }}{% endif -%}
+                  {%- else -%}–{%- endif -%}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    {% endfor %}
+  </section>
 {% endif %}
 {% endblock %}

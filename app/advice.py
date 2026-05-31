@@ -57,6 +57,18 @@ do them (adjust alkalinity before pH, etc.). Each step is one clear action with 
 the product and dose where relevant, what to do (pump running, add to water, add \
 gradually), and when to re-test. If the water is already balanced, give at most \
 one light maintenance step or leave it empty.
+- Use ALL the readings provided. The input includes the latest reading, every \
+reading taken so far today, and recent daily history. Compare today's readings \
+to spot intra-day movement (e.g. chlorine falling through a hot afternoon) and \
+compare against recent days for slower trends. Base the dosing on the latest \
+reading but explain any trend you see.
+- Be consistent and deterministic. Given the same inputs you must give the same \
+recommendations and the same dosing numbers every time. Use the standard target \
+ranges below and standard dosing relationships (e.g. ~1.5 g of calcium \
+hypochlorite per 1000 L raises Free Chlorine by ~1 ppm; ~17 g of sodium \
+bicarbonate per 1000 L raises Total Alkalinity by ~10 ppm), scaled to this \
+pool's volume and rounded sensibly. Do not re-derive figures differently on \
+repeat runs or introduce new caveats that change the numbers.
 
 Reference target ranges for a typical residential pool (use judgement to adapt \
 to the specific pool): pH 7.2-7.6; Total Alkalinity 80-120 ppm; Free Chlorine \
@@ -135,12 +147,44 @@ def _reading_to_dict(r: Reading, weather: dict | None = None) -> dict:
     return out
 
 
+def _local_today(pool: Pool):
+    """The current date in the pool's local timezone (UTC fallback)."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    now = datetime.now(timezone.utc)
+    if pool.timezone:
+        try:
+            return now.astimezone(ZoneInfo(pool.timezone)).date()
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return now.date()
+
+
+def _is_on_local_date(reading: Reading, target_date, pool: Pool) -> bool:
+    from datetime import timezone
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    taken = reading.taken_at
+    if taken.tzinfo is None:
+        taken = taken.replace(tzinfo=timezone.utc)
+    if pool.timezone:
+        try:
+            return taken.astimezone(ZoneInfo(pool.timezone)).date() == target_date
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return taken.astimezone(timezone.utc).date() == target_date
+
+
 def _build_pool_payload(
     pool: Pool, readings: list[Reading], weather: dict | None, notes: str | None
 ) -> str:
     import json
 
     from .models import estimate_volume_litres
+
+    today = _local_today(pool)
+    todays_readings = [r for r in readings if _is_on_local_date(r, today, pool)]
 
     payload = {
         "pool": {
@@ -163,8 +207,10 @@ def _build_pool_payload(
             "location": pool.location_name,
         },
         "owner_notes": notes or None,
+        "local_date": today.isoformat(),
         "latest_reading": _reading_to_dict(readings[0], weather) if readings else None,
-        "recent_history": [_reading_to_dict(r, weather) for r in readings[1:8]],
+        "readings_today": [_reading_to_dict(r, weather) for r in todays_readings],
+        "recent_history": [_reading_to_dict(r, weather) for r in readings[1:15]],
     }
     return json.dumps(payload, indent=2)
 
@@ -212,10 +258,13 @@ def _generate_with_claude(
         + _build_pool_payload(pool, readings, weather, notes)
     )
 
+    # temperature=0 (greedy decoding) for repeatability: the owner expects the
+    # same advice for the same water. Extended thinking forces temperature=1, so
+    # we don't use it here — reasoning effort still governs depth.
     response = client.messages.parse(
         model=settings.advice_model,
         max_tokens=4000,
-        thinking={"type": "adaptive"},
+        temperature=0,
         output_config={"effort": settings.advice_effort},
         system=[
             {
@@ -242,6 +291,47 @@ def _generate_with_claude(
             )
         )
     return assessment
+
+
+def regenerate_pool_advice(db, pool: Pool) -> bool:
+    """Generate fresh advice for ``pool`` and upsert its stored ``PoolAdvice`` row.
+
+    Shared by the manual triggers (new reading / Refresh) and the twice-daily
+    scheduler. Returns ``True`` if advice was written, ``False`` if the pool has
+    no readings to assess. Commits its own transaction.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from . import weather as weather_mod
+    from .models import PoolAdvice, Reading
+
+    readings = db.scalars(
+        select(Reading).where(Reading.pool_id == pool.id).order_by(Reading.taken_at.desc())
+    ).all()
+    if not readings:
+        return False
+
+    try:
+        weather_by_date = weather_mod.weather_for_dates(
+            db, pool, {r.taken_at.date() for r in readings}
+        )
+    except Exception:  # noqa: BLE001 - weather is a nice-to-have, never fatal
+        weather_by_date = {}
+
+    assessment = generate_advice(pool, list(readings), weather_by_date, notes=pool.notes)
+    payload = serialise_assessment(assessment)
+
+    advice = db.scalar(select(PoolAdvice).where(PoolAdvice.pool_id == pool.id))
+    if advice is None:
+        db.add(PoolAdvice(pool_id=pool.id, reading_id=readings[0].id, payload=payload))
+    else:
+        advice.payload = payload
+        advice.reading_id = readings[0].id
+        advice.generated_at = datetime.now(timezone.utc)
+    db.commit()
+    return True
 
 
 def serialise_assessment(assessment: Assessment) -> str:

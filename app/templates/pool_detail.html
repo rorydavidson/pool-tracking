@@ -106,19 +106,16 @@
     <div class="panel-body">
       {% if assessment.summary %}<p class="advice-summary">{{ assessment.summary }}</p>{% endif %}
 
-      <div class="recs">
+      <div class="rec-grid">
         {% for rec in assessment.sorted() %}
-          <details class="rec sev-{{ severity_class(rec.severity) }}" {{ 'open' if rec.severity.value in ['critical', 'warning'] }}>
-            <summary>
+          <article class="rec-card sev-{{ severity_class(rec.severity) }}">
+            <header class="rec-card-head">
+              <strong class="rec-param">{{ rec.parameter }}</strong>
               <span class="badge {{ severity_class(rec.severity) }}">{{ rec.severity.value }}</span>
-              <strong>{{ rec.parameter }}</strong>
-              {% if rec.action %}<span class="rec-hint">{{ rec.action }}</span>{% endif %}
-            </summary>
-            <div class="rec-body">
-              <p>{{ rec.message }}</p>
-              {% if rec.action %}<p class="action">→ {{ rec.action }}</p>{% endif %}
-            </div>
-          </details>
+            </header>
+            <p class="rec-message">{{ rec.message }}</p>
+            {% if rec.action %}<p class="rec-action">→ {{ rec.action }}</p>{% endif %}
+          </article>
         {% endfor %}
       </div>
 
@@ -129,7 +126,8 @@
         </div>
       {% endif %}
       {% if advice_generated_at %}
-        <p class="muted small advice-foot">Generated {{ fmt_local(advice_generated_at, pool.timezone) }} · stays until you add a reading or refresh.</p>
+        <p class="muted small advice-foot">Last run {{ fmt_local(advice_generated_at, pool.timezone) }}
+          · refreshes automatically at 07:00 and 19:00, when you add a reading, or on demand.</p>
       {% endif %}
     </div>
   </section>
@@ -148,8 +146,9 @@
   {# ---- History ----------------------------------------------------------- #}
   <section class="panel history-panel">
     <header class="panel-head">
-      <div class="panel-title"><span class="panel-dot accent"></span><h2>History</h2>
-        <span class="muted small">{{ readings|length }} reading(s)</span>
+      <div class="panel-title"><span class="panel-dot accent"></span><h2>Today</h2>
+        <span class="muted small">{{ todays_readings|length }} of {{ readings|length }} reading(s)
+          · <a href="/pools/{{ pool.id }}/analysis">full history →</a></span>
       </div>
       <div class="history-tools">
         <a class="secondary small" href="/pools/{{ pool.id }}/snapshot" title="Last 4 hours of readings + pool details, including location & notes. See Privacy.">📸 Snapshot (4h)</a>
@@ -160,6 +159,7 @@
         </form>
       </div>
     </header>
+    {% if todays_readings %}
     <div class="table-wrap">
       <table class="data-table">
         <thead><tr>
@@ -169,7 +169,7 @@
           <th>EC</th><th>TDS</th><th>Temp</th><th>Weather</th>
         </tr></thead>
         <tbody>
-          {% for r in readings %}
+          {% for r in todays_readings %}
           {% set w = weather.get(r.taken_at.date().isoformat()) %}
           <tr>
             <td class="row-action">
@@ -178,7 +178,7 @@
                 <button type="submit" class="icon-delete" title="Delete reading" aria-label="Delete reading">✕</button>
               </form>
             </td>
-            <td>{{ fmt_local(r.taken_at, pool.timezone, "%m-%d %H:%M") }}</td>
+            <td>{{ fmt_local(r.taken_at, pool.timezone, "%H:%M") }}</td>
             <td>{{ r.source.value }}</td>
             <td>{{ "%g"|format(r.ph) if r.ph is not none else "–" }}</td>
             <td>{{ "%g"|format(r.free_chlorine) if r.free_chlorine is not none else "–" }}</td>
@@ -203,6 +203,12 @@
         </tbody>
       </table>
     </div>
+    {% else %}
+    <div class="panel-body">
+      <p class="muted">No readings yet today.
+        <a href="/pools/{{ pool.id }}/analysis">View the full history →</a></p>
+    </div>
+    {% endif %}
   </section>
 {% endif %}
 
