@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Privacy — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Privacy</h1></div>
+
+<div class="card form-narrow prose">
+  <p class="muted">Pool Tracking is self-hosted: your data lives in this server's database and
+    data volume. A few features send some of it to third parties, listed below so you know
+    what leaves this server.</p>
+
+  <h2>What this server stores</h2>
+  <ul>
+    <li>Your email address (for passwordless login).</li>
+    <li>Your pools, readings, notes, and any pool or test-strip <strong>photos</strong> you upload.
+      Photos and pool details are stored unencrypted in the data volume.</li>
+    <li>Each pool's <strong>location</strong> (place name and latitude/longitude) if you set one.
+      This effectively identifies where your pool — usually your home — is.</li>
+    <li>Device-account credentials (Aiper / Blueriiot), <strong>encrypted at rest</strong> and used
+      only to fetch your own readings.</li>
+  </ul>
+
+  <h2>What is sent to third parties</h2>
+  <ul>
+    {% if claude_enabled %}
+    <li><strong>Anthropic (Claude)</strong> — when advice is generated, your pool details, recent
+      readings, weather, and notes are sent for analysis. When you read a test strip from a photo,
+      <strong>the photo is uploaded to Anthropic</strong> to interpret it. Avoid capturing people or
+      identifying surroundings in strip photos.</li>
+    {% else %}
+    <li><strong>Anthropic (Claude)</strong> — not configured on this instance, so no readings or
+      photos are sent for AI advice or strip reading.</li>
+    {% endif %}
+    <li><strong>Open-Meteo</strong> — to show weather alongside readings and to find your local
+      timezone, your pool's coordinates (and the place name when geocoding) are sent to Open-Meteo.
+      No account or API key is used.</li>
+    <li><strong>Email delivery ({{ email_provider }})</strong> — login links are delivered by your
+      configured provider, which receives your email address and the link.
+      {% if email_provider == "console" %}This instance is in console mode, so links are not emailed
+      and stay in the server logs / outbox.{% endif %}</li>
+    <li><strong>Device clouds</strong> — connecting a device logs in to that vendor's cloud
+      (and, for Aiper, AWS IoT) using your account, to read your measurements.</li>
+  </ul>
+
+  <h2>Exports</h2>
+  <p>The JSON export and the 4-hour snapshot include your pool details, readings, and
+    <strong>location coordinates and notes</strong>. If you paste an export into another tool or an
+    LLM, you are sharing that information with it. Images are never included in exports.</p>
+
+  <h2>Your control</h2>
+  <ul>
+    <li>Delete individual readings, a photo (on the pool's edit page), or a whole pool at any time;
+      deleting a pool removes its readings and advice.</li>
+    <li>Disconnect a device to remove its stored credentials.</li>
+    <li>Leave a pool's location blank to keep coordinates off this server and out of Open-Meteo calls
+      (you lose weather correlation and local time).</li>
+  </ul>
+</div>
+{% endblock %}

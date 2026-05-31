@@ -353,3 +353,9 @@ th { color: var(--muted); font-weight: 600; }
 .chart-xl { fill: var(--muted); font-size: 8px; }
 
 .footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 1.75rem 1rem; }
+.footer-sep { margin: 0 0.4rem; opacity: 0.6; }
+
+.prose { line-height: 1.6; }
+.prose h2 { font-size: 1.05rem; margin: 1.4rem 0 0.4rem; }
+.prose ul { margin: 0.3rem 0 0.6rem; padding-left: 1.2rem; }
+.prose li { margin: 0.3rem 0; }

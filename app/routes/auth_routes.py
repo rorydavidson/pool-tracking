@@ -22,6 +22,20 @@ def login_form(request: Request, user=Depends(auth.current_user)):
     return templates.TemplateResponse(request, "login.html")
 
 
+@router.get("/privacy", response_class=HTMLResponse)
+def privacy(request: Request, user=Depends(auth.current_user)):
+    settings = get_settings()
+    return templates.TemplateResponse(
+        request,
+        "privacy.html",
+        {
+            "user": user,
+            "claude_enabled": bool(settings.anthropic_api_key),
+            "email_provider": settings.email_provider,
+        },
+    )
+
+
 @router.post("/auth/request", response_class=HTMLResponse)
 def request_link(request: Request, email: str = Form(...), db: Session = Depends(get_db)):
     settings = get_settings()

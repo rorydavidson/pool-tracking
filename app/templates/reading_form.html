@@ -9,6 +9,8 @@
     <h2>Read from a test-strip photo</h2>
     <p class="muted small">Upload a photo of the dipped strip next to its colour key.
       Claude reads the pads and fills in the values below for you to check.</p>
+    <p class="muted small">🔒 The photo is sent to Anthropic (Claude) to read it. Avoid capturing
+      people or identifying surroundings. See <a href="/privacy">Privacy</a>.</p>
     <form method="post" action="/pools/{{ pool.id }}/readings/scan" enctype="multipart/form-data">
       <input type="file" name="photo" accept="image/*" required>
       <button type="submit" class="secondary">Read photo</button>

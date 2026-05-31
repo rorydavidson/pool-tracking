@@ -152,8 +152,8 @@
         <span class="muted small">{{ readings|length }} reading(s)</span>
       </div>
       <div class="history-tools">
-        <a class="secondary small" href="/pools/{{ pool.id }}/snapshot" title="Export readings from the last 4 hours + pool details">📸 Snapshot (4h)</a>
-        <a class="secondary small" href="/pools/{{ pool.id }}/export">⬇ Export JSON</a>
+        <a class="secondary small" href="/pools/{{ pool.id }}/snapshot" title="Last 4 hours of readings + pool details, including location & notes. See Privacy.">📸 Snapshot (4h)</a>
+        <a class="secondary small" href="/pools/{{ pool.id }}/export" title="All readings + pool details, including location & notes. See Privacy.">⬇ Export JSON</a>
         <form method="post" action="/pools/{{ pool.id }}/import" enctype="multipart/form-data" class="import-form">
           <input type="file" name="file" accept="application/json,.json" required>
           <button type="submit" class="secondary small">⬆ Import</button>

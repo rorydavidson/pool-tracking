@@ -64,6 +64,8 @@
     </div>
 
     <label for="location">Location <span class="muted small">(for weather &amp; local time)</span></label>
+    <p class="muted small">🔒 Coordinates are sent to Open-Meteo for weather and timezone, and identify
+      where your pool is. Leave blank to keep them off this server.</p>
     <input type="text" id="location" name="location" value="{{ pool.location_name or '' }}" placeholder="e.g. Brisbane, Australia">
     <div class="row">
       <input type="number" step="any" name="latitude" placeholder="latitude"

@@ -188,6 +188,27 @@ The schema evolves through a lightweight migration in `database.py`
 (`_add_missing_columns`), which adds any missing columns on startup. There is no
 separate migration tool.
 
+## Privacy
+
+The app is self-hosted, so data lives in your database and data volume. A few
+features send some of it to third parties (there's an in-app summary at
+`/privacy`):
+
+- **Anthropic (Claude)** receives pool details, readings and notes for advice,
+  and **the uploaded photo** when reading a test strip. Only when
+  `ANTHROPIC_API_KEY` is set.
+- **Open-Meteo** receives a pool's coordinates (and place name when geocoding)
+  for weather and timezone. These coordinates identify where your pool is. Leave
+  a pool's location blank to avoid this.
+- **Your email provider** (Resend or SMTP) receives your email address and login
+  link.
+- **Device clouds** (Aiper/Blueriiot, and AWS IoT for Aiper) are accessed with
+  your own account credentials, which are encrypted at rest.
+
+Photos and pool details (including location) are stored unencrypted in the data
+volume. JSON exports and the 4-hour snapshot include location and notes (but not
+images), so be mindful when pasting them into other tools or LLMs.
+
 ## Notes & disclaimer
 
 Dosing advice is an estimate to guide a non-expert owner: always add chemicals
