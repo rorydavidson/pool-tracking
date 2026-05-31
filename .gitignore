@@ -17,3 +17,4 @@ venv/
 # Generated design preview images
 screenshots/
 .vscode/settings.json
+*DS_Store
