@@ -301,6 +301,26 @@ th { color: var(--muted); font-weight: 600; }
 
 .weather-cell { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
 
+/* --- Context log (dated events across a pool's life) --- */
+.context-list { list-style: none; margin: 0.6rem 0 1rem; padding: 0; }
+.context-item {
+  display: flex; align-items: baseline; gap: 0.7rem;
+  padding: 0.5rem 0; border-top: 1px solid var(--line);
+}
+.context-item:first-child { border-top: none; }
+.context-date {
+  flex: 0 0 6.5rem; font-variant-numeric: tabular-nums;
+  font-weight: 600; color: var(--accent-dark); font-size: 0.85rem;
+}
+.context-note { flex: 1 1 auto; min-width: 0; }
+.context-item form { margin: 0; flex: 0 0 auto; }
+.context-form { margin-top: 0.4rem; }
+.context-form-row { display: flex; gap: 0.7rem; align-items: flex-end; flex-wrap: wrap; }
+.context-form-row label { display: flex; flex-direction: column; gap: 0.2rem; }
+.context-date-field { flex: 0 0 auto; }
+.context-note-field { flex: 1 1 16rem; min-width: 0; }
+.context-form-row input { font: inherit; }
+
 /* --- Weather card (clickable, opens the forecast dialog) --- */
 .weather-card {
   display: flex; align-items: center; gap: 0.85rem; width: 100%;

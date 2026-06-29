@@ -1,6 +1,8 @@
 """End-to-end-ish tests for auth, pools, readings, and integrations."""
 from __future__ import annotations
 
+from datetime import date
+
 
 def test_healthz(client):
     resp = client.get("/healthz")
@@ -67,6 +69,126 @@ def test_create_pool_and_reading_shows_advice(logged_in_client):
     assert page.status_code == 200
     assert "Advice" in page.text
     assert "Free chlorine" in page.text
+
+
+def test_context_log_add_list_and_export(logged_in_client):
+    client = logged_in_client
+    resp = client.post(
+        "/pools/new",
+        data={"name": "Context Pool", "volume": "30000", "volume_unit": "litres"},
+        follow_redirects=False,
+    )
+    pool_url = resp.headers["location"]
+
+    # Add a dated context note.
+    add = client.post(
+        f"{pool_url}/context",
+        data={"event_date": "2026-05-01", "note": "Replaced the salt cell"},
+        follow_redirects=False,
+    )
+    assert add.status_code == 303
+
+    # It shows on the pool page.
+    page = client.get(pool_url)
+    assert "Context log" in page.text
+    assert "Replaced the salt cell" in page.text
+
+    # And it travels with the snapshot/export ("full pool details").
+    snap = client.get(f"{pool_url}/snapshot")
+    body = snap.json()
+    log = body["pool"]["context_log"]
+    assert any(n["note"] == "Replaced the salt cell" and n["date"] == "2026-05-01" for n in log)
+
+    # The readings export carries the context log too.
+    export = client.get(f"{pool_url}/export").json()
+    assert {"date": "2026-05-01", "note": "Replaced the salt cell"} in export["context_log"]
+
+
+def test_context_log_import_round_trip(logged_in_client):
+    """Importing an export envelope restores the context log into a fresh pool."""
+    import io
+    import json
+
+    client = logged_in_client
+    dest = client.post(
+        "/pools/new",
+        data={"name": "Import Target", "volume": "25000", "volume_unit": "litres"},
+        follow_redirects=False,
+    )
+    pool_url = dest.headers["location"]
+
+    envelope = {
+        "kind": "pool-tracking.readings",
+        "version": 2,
+        "readings": [],
+        "context_log": [
+            {"date": "2026-03-15", "note": "Opened the pool for the season"},
+            {"date": "2026-04-02", "note": "Shock treatment after algae"},
+        ],
+    }
+    file = io.BytesIO(json.dumps(envelope).encode())
+    imp = client.post(
+        f"{pool_url}/import",
+        files={"file": ("export.json", file, "application/json")},
+        follow_redirects=False,
+    )
+    assert imp.status_code == 303
+    assert "2%20context%20note(s)" in imp.headers["location"]
+
+    page = client.get(pool_url)
+    assert "Opened the pool for the season" in page.text
+    assert "Shock treatment after algae" in page.text
+
+    # Re-importing the same file adds no duplicates (suffix omitted when zero added).
+    file2 = io.BytesIO(json.dumps(envelope).encode())
+    again = client.post(
+        f"{pool_url}/import",
+        files={"file": ("export.json", file2, "application/json")},
+        follow_redirects=False,
+    )
+    assert "context%20note" not in again.headers["location"]
+
+
+def test_context_note_requires_text(logged_in_client):
+    client = logged_in_client
+    resp = client.post(
+        "/pools/new",
+        data={"name": "Blank Note Pool", "volume": "20000", "volume_unit": "litres"},
+        follow_redirects=False,
+    )
+    pool_url = resp.headers["location"]
+    add = client.post(
+        f"{pool_url}/context",
+        data={"event_date": "2026-05-01", "note": "   "},
+        follow_redirects=False,
+    )
+    assert add.status_code == 303
+    assert "error=" in add.headers["location"]
+
+
+def test_context_log_in_advice_payload():
+    """The dated context log is serialised into the payload sent to Claude."""
+    import json
+
+    from app.advice import _build_pool_payload
+    from app.models import Pool, PoolContextNote, SanitizerType, SurfaceType
+
+    pool = Pool(
+        name="Payload Pool",
+        volume_litres=40000,
+        sanitizer=SanitizerType.chlorine,
+        surface=SurfaceType.plaster,
+        indoor=False,
+    )
+    notes = [
+        PoolContextNote(event_date=date(2026, 4, 1), note="Drained and refilled"),
+        PoolContextNote(event_date=date(2026, 6, 1), note="Added 400 g stabiliser"),
+    ]
+    payload = json.loads(_build_pool_payload(pool, [], None, None, notes))
+    log = payload["context_log"]
+    # Newest event first.
+    assert [n["date"] for n in log] == ["2026-06-01", "2026-04-01"]
+    assert log[0]["note"] == "Added 400 g stabiliser"
 
 
 def test_cannot_view_another_users_pool(logged_in_client):

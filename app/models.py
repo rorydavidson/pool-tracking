@@ -4,7 +4,10 @@ from __future__ import annotations
 import enum
 from datetime import datetime, timezone
 
+from datetime import date as _date
+
 from sqlalchemy import (
+    Date,
     DateTime,
     Enum,
     Float,
@@ -163,6 +166,11 @@ class Pool(Base):
     advice: Mapped["PoolAdvice | None"] = relationship(
         back_populates="pool", cascade="all, delete-orphan", uselist=False
     )
+    context_notes: Mapped[list["PoolContextNote"]] = relationship(
+        back_populates="pool",
+        cascade="all, delete-orphan",
+        order_by="PoolContextNote.event_date.desc()",
+    )
 
 
 class Reading(Base):
@@ -229,6 +237,29 @@ class PoolAdvice(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     pool: Mapped["Pool"] = relationship(back_populates="advice")
+
+
+class PoolContextNote(Base):
+    """A dated context note spanning the life of a pool.
+
+    Unlike :attr:`Pool.notes` (a single current-state free-text field), these are
+    a timeline of events the owner records over the pool's life — a treatment, an
+    equipment change, a repair/resurface, a drain-and-refill, heavy use, or a
+    storm — each pinned to a user-chosen date. They give the advice generator
+    historical context to explain readings (e.g. CYA was just added, the surface
+    was recently replaced) rather than only the latest snapshot.
+    """
+
+    __tablename__ = "pool_context_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pool_id: Mapped[int] = mapped_column(ForeignKey("pools.id", ondelete="CASCADE"), index=True)
+    # The date the event happened, chosen by the owner (defaults to today in the UI).
+    event_date: Mapped[_date] = mapped_column(Date, nullable=False, index=True)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    pool: Mapped["Pool"] = relationship(back_populates="context_notes")
 
 
 class ProviderCredential(Base):

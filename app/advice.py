@@ -62,6 +62,19 @@ reading taken so far today, and recent daily history. Compare today's readings \
 to spot intra-day movement (e.g. chlorine falling through a hot afternoon) and \
 compare against recent days for slower trends. Base the dosing on the latest \
 reading but explain any trend you see.
+- Two kinds of owner context may be supplied, and they mean different things. \
+"owner_notes" is a single free-text description of the pool's current state or \
+surroundings (e.g. "near oak trees", "cover left off"). "context_log" is a dated \
+timeline of events over the pool's life, newest first — treatments and chemical \
+additions, equipment changes (new salt cell, pump), repairs or resurfacing, \
+drain-and-refills, heavy bather load, or storms. Use the context log to EXPLAIN \
+the readings and to AVOID redundant or unsafe advice: if a chemical was just \
+added, account for it and don't tell the owner to re-dose it; a recent \
+resurface (especially plaster) drives pH and calcium hardness up for weeks; a \
+recent drain-and-refill resets most parameters toward source-water values; a \
+new salt cell or stabiliser addition changes what "normal" looks like. Weight \
+recent events far more heavily than old ones, and never invent events that are \
+not in the log. If an event there plausibly explains a reading, say so.
 - Be consistent and deterministic. Given the same inputs you must give the same \
 recommendations and the same dosing numbers every time. Use the standard target \
 ranges below and standard dosing relationships (e.g. ~1.5 g of calcium \
@@ -189,8 +202,20 @@ def _is_on_local_date(reading: Reading, target_date, pool: Pool) -> bool:
     return taken.astimezone(timezone.utc).date() == target_date
 
 
+def _context_log(context_notes: list | None) -> list[dict] | None:
+    """Serialise the pool's dated context notes, newest event first."""
+    if not context_notes:
+        return None
+    ordered = sorted(context_notes, key=lambda n: n.event_date, reverse=True)
+    return [{"date": n.event_date.isoformat(), "note": n.note} for n in ordered]
+
+
 def _build_pool_payload(
-    pool: Pool, readings: list[Reading], weather: dict | None, notes: str | None
+    pool: Pool,
+    readings: list[Reading],
+    weather: dict | None,
+    notes: str | None,
+    context_notes: list | None = None,
 ) -> str:
     import json
 
@@ -220,6 +245,7 @@ def _build_pool_payload(
             "location": pool.location_name,
         },
         "owner_notes": notes or None,
+        "context_log": _context_log(context_notes),
         "local_date": today.isoformat(),
         "latest_reading": _reading_to_dict(readings[0], weather) if readings else None,
         "readings_today": [_reading_to_dict(r, weather) for r in todays_readings],
@@ -233,6 +259,7 @@ def generate_advice(
     readings: list[Reading],
     weather: dict | None = None,
     notes: str | None = None,
+    context_notes: list | None = None,
 ) -> Assessment:
     """Return an :class:`Assessment` for the pool's latest reading.
 
@@ -240,7 +267,9 @@ def generate_advice(
     earlier ones are supplied as trend context. ``weather`` optionally maps ISO
     dates to :class:`~app.weather.WeatherSummary` so Claude can correlate the
     readings with the weather on those days. ``notes`` is free-text context the
-    owner has supplied about the pool (e.g. recent treatments, surroundings).
+    owner has supplied about the pool's current state (e.g. surroundings).
+    ``context_notes`` is the pool's dated context log (:class:`PoolContextNote`)
+    — a timeline of events over the pool's life that explain the readings.
     """
     settings = get_settings()
     if not readings:
@@ -250,7 +279,7 @@ def generate_advice(
         return chemistry.fallback_assessment(pool, readings[0])
 
     try:
-        return _generate_with_claude(pool, readings, weather, notes, settings)
+        return _generate_with_claude(pool, readings, weather, notes, context_notes, settings)
     except Exception as exc:  # noqa: BLE001 - never let advice failure break the page
         logger.exception("Claude advice generation failed; using fallback")
         return chemistry.fallback_assessment(
@@ -264,7 +293,12 @@ def generate_advice(
 
 
 def _generate_with_claude(
-    pool: Pool, readings: list[Reading], weather: dict | None, notes: str | None, settings
+    pool: Pool,
+    readings: list[Reading],
+    weather: dict | None,
+    notes: str | None,
+    context_notes: list | None,
+    settings,
 ) -> Assessment:
     import anthropic
 
@@ -272,8 +306,9 @@ def _generate_with_claude(
     user_content = (
         "Assess this pool's water and give dosing advice for the latest reading. "
         "Where weather is included, note any links between the weather and the "
-        "readings. Take the owner's notes into account where relevant.\n\n"
-        + _build_pool_payload(pool, readings, weather, notes)
+        "readings. Take the owner's notes and the dated context log into account "
+        "where relevant.\n\n"
+        + _build_pool_payload(pool, readings, weather, notes, context_notes)
     )
 
     # This model deprecates `temperature`, so we can't force greedy decoding.
@@ -324,13 +359,19 @@ def regenerate_pool_advice(db, pool: Pool) -> bool:
     from sqlalchemy import select
 
     from . import weather as weather_mod
-    from .models import PoolAdvice, Reading
+    from .models import PoolAdvice, PoolContextNote, Reading
 
     readings = db.scalars(
         select(Reading).where(Reading.pool_id == pool.id).order_by(Reading.taken_at.desc())
     ).all()
     if not readings:
         return False
+
+    context_notes = db.scalars(
+        select(PoolContextNote)
+        .where(PoolContextNote.pool_id == pool.id)
+        .order_by(PoolContextNote.event_date.desc())
+    ).all()
 
     try:
         weather_by_date = weather_mod.weather_for_dates(
@@ -339,7 +380,13 @@ def regenerate_pool_advice(db, pool: Pool) -> bool:
     except Exception:  # noqa: BLE001 - weather is a nice-to-have, never fatal
         weather_by_date = {}
 
-    assessment = generate_advice(pool, list(readings), weather_by_date, notes=pool.notes)
+    assessment = generate_advice(
+        pool,
+        list(readings),
+        weather_by_date,
+        notes=pool.notes,
+        context_notes=list(context_notes),
+    )
     payload = serialise_assessment(assessment)
 
     advice = db.scalar(select(PoolAdvice).where(PoolAdvice.pool_id == pool.id))

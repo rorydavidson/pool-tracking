@@ -5,7 +5,7 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -26,6 +26,7 @@ from ..database import get_db
 from ..models import (
     Pool,
     PoolAdvice,
+    PoolContextNote,
     PoolShape,
     PoolType,
     Reading,
@@ -75,7 +76,7 @@ EXPORT_NUMERIC_FIELDS = [
     "calcium_hardness", "salt", "orp", "ec", "tds", "temperature_c",
 ]
 
-EXPORT_VERSION = 1
+EXPORT_VERSION = 2  # v2 added the pool's dated context log
 EXPORT_KIND = "pool-tracking.readings"
 MAX_IMPORT_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -283,6 +284,7 @@ def pool_detail(
             "advice_generated_at": advice_generated_at,
             "metric_status": metric_status,
             "weather": weather_by_date,
+            "today": today,
             "flash": request.query_params.get("flash"),
             "error": request.query_params.get("error"),
         },
@@ -677,6 +679,14 @@ def delete_reading(
     return RedirectResponse(f"/pools/{pool.id}?flash=Reading deleted", status_code=303)
 
 
+def _context_log_export(pool: Pool) -> list[dict]:
+    """Serialise the pool's dated context notes, newest event first."""
+    return [
+        {"date": n.event_date.isoformat(), "note": n.note}
+        for n in sorted(pool.context_notes, key=lambda n: n.event_date, reverse=True)
+    ]
+
+
 def _reading_to_export(r: Reading) -> dict:
     """Serialise one reading to a plain JSON-friendly dict (no image)."""
     out: dict = {"taken_at": r.taken_at.isoformat(), "source": r.source.value}
@@ -727,6 +737,7 @@ def export_readings(
             "location_name": pool.location_name,
         },
         "readings": [_reading_to_export(r) for r in readings],
+        "context_log": _context_log_export(pool),
     }
     filename = f"{_slug(pool.name)}-readings.json"
     return JSONResponse(
@@ -780,6 +791,7 @@ def _pool_spec_dict(pool: Pool) -> dict:
         "longitude": pool.longitude,
         "timezone": pool.timezone,
         "notes": pool.notes,
+        "context_log": _context_log_export(pool),
     }
 
 
@@ -924,11 +936,49 @@ async def import_readings(
         seen.add(key)
         added += 1
 
+    # Import the dated context log too (envelope only; a bare list has no log).
+    notes_added = _import_context_log(db, pool, data if isinstance(data, dict) else {})
+
     db.commit()
+    note_suffix = f", {notes_added} context note(s)" if notes_added else ""
     return RedirectResponse(
-        f"/pools/{pool.id}?flash=Imported {added} reading(s), skipped {skipped} duplicate(s)",
+        f"/pools/{pool.id}?flash=Imported {added} reading(s), "
+        f"skipped {skipped} duplicate(s){note_suffix}",
         status_code=303,
     )
+
+
+def _import_context_log(db: Session, pool: Pool, data: dict) -> int:
+    """Add any context-log entries from an import envelope, de-duped. Returns count added."""
+    entries = data.get("context_log")
+    if not isinstance(entries, list):
+        return 0
+
+    seen = {
+        (n.event_date.isoformat(), n.note)
+        for n in db.scalars(
+            select(PoolContextNote).where(PoolContextNote.pool_id == pool.id)
+        ).all()
+    }
+
+    added = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        text = str(entry.get("note") or "").strip()
+        if not text:
+            continue
+        try:
+            when = date.fromisoformat(str(entry.get("date")))
+        except (TypeError, ValueError):
+            continue
+        key = (when.isoformat(), text)
+        if key in seen:
+            continue
+        db.add(PoolContextNote(pool_id=pool.id, event_date=when, note=text))
+        seen.add(key)
+        added += 1
+    return added
 
 
 @router.post("/pools/{pool_id}/location")
@@ -1086,6 +1136,68 @@ def refresh_advice(
         return RedirectResponse("/", status_code=303)
     _regenerate_advice(db, pool)
     return RedirectResponse(f"/pools/{pool.id}", status_code=303)
+
+
+@router.post("/pools/{pool_id}/context")
+def add_context_note(
+    pool_id: int,
+    event_date: str = Form(""),
+    note: str = Form(""),
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    """Add a dated context-log entry spanning the pool's life, then re-run advice.
+
+    Adding an event is a deliberate action with new information for the advisor,
+    so we regenerate advice the same way a new reading does.
+    """
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+
+    text = note.strip()
+    if not text:
+        return RedirectResponse(
+            f"/pools/{pool.id}?error=Add a note describing what happened", status_code=303
+        )
+
+    try:
+        when = date.fromisoformat(event_date.strip()) if event_date.strip() else None
+    except ValueError:
+        when = None
+    if when is None:
+        when = _local_date(datetime.now(timezone.utc), pool.timezone)
+
+    db.add(PoolContextNote(pool_id=pool.id, event_date=when, note=text))
+    db.commit()
+
+    _regenerate_advice(db, pool)
+    return RedirectResponse(f"/pools/{pool.id}?flash=Context note added", status_code=303)
+
+
+@router.post("/pools/{pool_id}/context/{note_id}/delete")
+def delete_context_note(
+    pool_id: int,
+    note_id: int,
+    user=Depends(auth.current_user),
+    db: Session = Depends(get_db),
+):
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    pool = _get_owned_pool(db, user.id, pool_id)
+    if pool is None:
+        return RedirectResponse("/", status_code=303)
+    note = db.scalar(
+        select(PoolContextNote).where(
+            PoolContextNote.id == note_id, PoolContextNote.pool_id == pool.id
+        )
+    )
+    if note is not None:
+        db.delete(note)
+        db.commit()
+    return RedirectResponse(f"/pools/{pool.id}?flash=Context note deleted", status_code=303)
 
 
 @router.post("/pools/{pool_id}/delete")

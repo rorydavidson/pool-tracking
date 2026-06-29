@@ -28,6 +28,10 @@ you can spot what is driving changes in your pool.
   **Refresh**, not on every page view, so it stays stable and cheap.
 - **Per-pool notes.** Add free-text context ("recently shocked", "lots of leaves")
   that is fed into the advice.
+- **Context log.** Record dated events across a pool's whole life (chemicals added,
+  a new salt cell or pump, a resurface, a drain and refill, heavy use, a storm),
+  each pinned to the date it happened. The log is fed to Claude so advice can
+  explain readings from real history and avoid redundant or unsafe re-dosing.
 - **Analysis page with charts.** Per-parameter trend charts (server-rendered SVG,
   no JavaScript) with shaded target bands.
 - **Full editable pool details.** Volume, sanitiser, surface, indoor/outdoor, plus
@@ -97,7 +101,8 @@ app/
   config.py          Env-based settings (data/uploads dirs, email provider)
   database.py        SQLAlchemy engine + lightweight column migration
   models.py          User, MagicToken, Pool, Reading, PoolAdvice,
-                     ProviderCredential, WeatherDay + pool volume estimator
+                     PoolContextNote, ProviderCredential, WeatherDay
+                     + pool volume estimator
   security.py        Token hashing + Fernet encryption for device credentials
   email_utils.py     Magic-link delivery (Resend / SMTP / console)
   auth.py            Magic-link issue/consume + session helpers
@@ -122,9 +127,9 @@ app/
 ### Advice
 
 `advice.py` sends the pool spec (including dimensions and the calculated volume
-estimate), recent reading history with each day's weather, and your notes to
-Claude using the Messages API with **structured outputs** and **prompt caching**
-on the stable expert system prompt. The result is stored in `pool_advice` and
+estimate), recent reading history with each day's weather, your notes, and the
+pool's dated context log to Claude using the Messages API with **structured
+outputs** and **prompt caching** on the stable expert system prompt. The result is stored in `pool_advice` and
 shown on the pool page; it is only regenerated when you add a reading or press
 **Refresh**. If the API key is missing or a call fails, it falls back to
 `chemistry.fallback_assessment` so the page always renders.
@@ -148,11 +153,14 @@ pool's local timezone.
 
 - **Export / import** the full history as JSON. Import accepts the export envelope
   or a bare array and de-dupes on `(source, external_id, taken_at)`, so
-  re-importing is idempotent. Images are not included.
+  re-importing is idempotent. The export also carries the pool's dated **context
+  log**, which import restores and de-dupes on `(date, note)`. Images are not
+  included.
 - **Snapshot (4h)** emits a JSON document describing the pool (type, shape,
-  dimensions, volume and estimate, sanitiser, surface, location, timezone) plus
-  every reading from the last 4 hours, with UTC and local timestamps and a `units`
-  map. It is designed to be dropped into other tools or LLMs.
+  dimensions, volume and estimate, sanitiser, surface, location, timezone, notes
+  and context log) plus every reading from the last 4 hours, with UTC and local
+  timestamps and a `units` map. It is designed to be dropped into other tools or
+  LLMs.
 
 ### Device integrations
 
@@ -195,8 +203,8 @@ The app is self-hosted, so data lives in your database and data volume. A few
 features send some of it to third parties (there's an in-app summary at
 `/privacy`):
 
-- **Anthropic (Claude)** receives pool details, readings and notes for advice,
-  and **the uploaded photo** when reading a test strip. Only when
+- **Anthropic (Claude)** receives pool details, readings, notes and the context
+  log for advice, and **the uploaded photo** when reading a test strip. Only when
   `ANTHROPIC_API_KEY` is set.
 - **Open-Meteo** receives a pool's coordinates (and place name when geocoding)
   for weather and timezone. These coordinates identify where your pool is. Leave
@@ -207,8 +215,9 @@ features send some of it to third parties (there's an in-app summary at
   your own account credentials, which are encrypted at rest.
 
 Photos and pool details (including location) are stored unencrypted in the data
-volume. JSON exports and the 4-hour snapshot include location and notes (but not
-images), so be mindful when pasting them into other tools or LLMs.
+volume. JSON exports and the 4-hour snapshot include location, notes and the
+context log (but not images), so be mindful when pasting them into other tools or
+LLMs.
 
 ## Notes & disclaimer
 
