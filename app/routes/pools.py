@@ -1146,10 +1146,11 @@ def add_context_note(
     user=Depends(auth.current_user),
     db: Session = Depends(get_db),
 ):
-    """Add a dated context-log entry spanning the pool's life, then re-run advice.
+    """Add a dated context-log entry spanning the pool's life.
 
-    Adding an event is a deliberate action with new information for the advisor,
-    so we regenerate advice the same way a new reading does.
+    We don't regenerate advice here: the new note is picked up by the next
+    scheduled run, the next reading, or a manual Refresh, so adding context
+    doesn't trigger a Claude call.
     """
     if not user:
         return RedirectResponse("/login", status_code=303)
@@ -1172,8 +1173,6 @@ def add_context_note(
 
     db.add(PoolContextNote(pool_id=pool.id, event_date=when, note=text))
     db.commit()
-
-    _regenerate_advice(db, pool)
     return RedirectResponse(f"/pools/{pool.id}?flash=Context note added", status_code=303)
 
 
