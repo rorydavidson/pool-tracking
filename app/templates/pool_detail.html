@@ -1,33 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ pool.name }} — {{ app_name }}{% endblock %}
-{% block content %}
-<section class="hero {{ 'has-photo' if pool.image_path else 'no-photo' }}"
-  {% if pool.image_path %}style="background-image:linear-gradient(to top, rgba(8,40,48,0.82) 0%, rgba(8,40,48,0.15) 55%, rgba(8,40,48,0.05) 100%), url('/pools/{{ pool.id }}/image')"{% endif %}>
-  <div class="hero-body">
-    <h1>{{ pool.name }}</h1>
-    <div class="chips">
-      <span class="chip">{{ "%.0f"|format(pool.volume_litres) }} L</span>
-      <span class="chip">{{ pool.sanitizer.value }}</span>
-      <span class="chip">{{ pool.surface.value }}</span>
-      <span class="chip">{{ "indoor" if pool.indoor else "outdoor" }}</span>
-      {% if pool.pool_type %}<span class="chip">{{ pool.pool_type.value.replace("_", "-") }}</span>{% endif %}
-      {% if pool.shape %}<span class="chip">{{ pool.shape.value }}</span>{% endif %}
-      {% if pool.length_m and pool.avg_depth_m %}
-        <span class="chip">{{ "%g"|format(pool.length_m) }}{% if pool.width_m %}×{{ "%g"|format(pool.width_m) }}{% endif %}m · {{ "%g"|format(pool.avg_depth_m) }}m deep</span>
-      {% endif %}
-      {% if pool.location_name %}<span class="chip">📍 {{ pool.location_name }}</span>{% endif %}
-    </div>
-  </div>
-  <div class="hero-actions">
-    <a class="btn-ghost" href="/pools/{{ pool.id }}/edit">⚙ Edit</a>
-    {% if readings %}<a class="btn-ghost" href="/pools/{{ pool.id }}/analysis">📈 Analysis</a>{% endif %}
-    <a class="btn-bright" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
-  </div>
-</section>
 
-{% if flash %}<p class="alert low">{{ flash }}</p>{% endif %}
-{% if error %}<p class="alert critical">{{ error }}</p>{% endif %}
-
+{% macro context_log_panel(pool, today) %}
 {# ---- Context log ------------------------------------------------------- #}
 <section class="panel context-panel">
   <header class="panel-head">
@@ -73,6 +47,35 @@
     </form>
   </div>
 </section>
+{% endmacro %}
+
+{% block content %}
+<section class="hero {{ 'has-photo' if pool.image_path else 'no-photo' }}"
+  {% if pool.image_path %}style="background-image:linear-gradient(to top, rgba(8,40,48,0.82) 0%, rgba(8,40,48,0.15) 55%, rgba(8,40,48,0.05) 100%), url('/pools/{{ pool.id }}/image')"{% endif %}>
+  <div class="hero-body">
+    <h1>{{ pool.name }}</h1>
+    <div class="chips">
+      <span class="chip">{{ "%.0f"|format(pool.volume_litres) }} L</span>
+      <span class="chip">{{ pool.sanitizer.value }}</span>
+      <span class="chip">{{ pool.surface.value }}</span>
+      <span class="chip">{{ "indoor" if pool.indoor else "outdoor" }}</span>
+      {% if pool.pool_type %}<span class="chip">{{ pool.pool_type.value.replace("_", "-") }}</span>{% endif %}
+      {% if pool.shape %}<span class="chip">{{ pool.shape.value }}</span>{% endif %}
+      {% if pool.length_m and pool.avg_depth_m %}
+        <span class="chip">{{ "%g"|format(pool.length_m) }}{% if pool.width_m %}×{{ "%g"|format(pool.width_m) }}{% endif %}m · {{ "%g"|format(pool.avg_depth_m) }}m deep</span>
+      {% endif %}
+      {% if pool.location_name %}<span class="chip">📍 {{ pool.location_name }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="hero-actions">
+    <a class="btn-ghost" href="/pools/{{ pool.id }}/edit">⚙ Edit</a>
+    {% if readings %}<a class="btn-ghost" href="/pools/{{ pool.id }}/analysis">📈 Analysis</a>{% endif %}
+    <a class="btn-bright" href="/pools/{{ pool.id }}/readings/new">+ Add reading</a>
+  </div>
+</section>
+
+{% if flash %}<p class="alert low">{{ flash }}</p>{% endif %}
+{% if error %}<p class="alert critical">{{ error }}</p>{% endif %}
 
 {% if not latest %}
   <div class="card empty">
@@ -81,6 +84,8 @@
     <p class="muted small">Or pull one automatically from a connected device on the
       <a href="/integrations">Devices</a> page.</p>
   </div>
+
+  {{ context_log_panel(pool, today) }}
 {% else %}
 
   {# ---- Latest reading ---------------------------------------------------- #}
@@ -150,6 +155,8 @@
       {% endif %}
     </div>
   </section>
+
+  {{ context_log_panel(pool, today) }}
 
   {# ---- Advice ------------------------------------------------------------ #}
   {% if assessment %}
