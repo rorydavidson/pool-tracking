@@ -164,17 +164,26 @@ pool's local timezone.
 
 ### Device integrations
 
-Neither Aiper nor Blueriiot publishes an official API, so each adapter is isolated
-behind the `PoolDevice` interface and normalises whatever the vendor returns into
-the app's canonical units (ppm, mV, °C). Credentials you enter are **encrypted at
-rest** (Fernet, key derived from `APP_SECRET`) and only used to fetch your own
-measurements.
+Each adapter is isolated behind the `PoolDevice` interface and normalises
+whatever the vendor returns into the app's canonical units (ppm, mV, °C).
+Credentials you enter are **encrypted at rest** (Fernet, key derived from
+`APP_SECRET`) and only used to fetch your own measurements.
 
 For Aiper, login and device discovery use the vendor's encrypted REST API
 (region-selectable: Europe, Americas, Asia), but the HydroComm reports water
 quality only over MQTT, so `aiper_shadow.py` connects to AWS IoT over a
-SigV4-signed WebSocket and reads the device shadow. Endpoints are based on
-community reverse-engineering and may need adjusting if a vendor changes their API.
+SigV4-signed WebSocket and reads the device shadow. Neither Aiper nor Blueriiot
+publishes an official API; those endpoints are based on community
+reverse-engineering and may need adjusting if a vendor changes their API.
+
+**PoolLab (LabCOM)** covers Water-i.d.'s PoolLab 1.0/2.0 photometers, which sync
+via the LabCOM app to the LabCOM cloud. Connect it with an API token generated
+in your account settings at [labcom.cloud](https://labcom.cloud) (not your
+password). The adapter queries LabCOM's GraphQL API
+(`backend.labcom.cloud/graphql`), skips the demo "tutorial" measurements and
+out-of-range results (`OVERRANGE`/`UNDERRANGE`), and groups single-parameter
+photometer tests taken within an hour of each other into one reading per test
+session.
 
 ### Weather and timezone
 

@@ -216,3 +216,77 @@ def test_integrations_page_lists_providers(logged_in_client):
     assert page.status_code == 200
     assert "Aiper HydroComm" in page.text
     assert "Blueriiot Blue Connect" in page.text
+    assert "PoolLab (LabCOM)" in page.text
+    # PoolLab connects with an API token rather than a login.
+    assert "LabCOM API key" in page.text
+
+
+def test_poollab_connect_and_sync(logged_in_client, monkeypatch):
+    """Connecting with an API key and syncing stores de-duped readings."""
+    from datetime import datetime, timezone
+
+    from app.integrations.base import DeviceMeasurement
+
+    client = logged_in_client
+
+    class FakePoolLab:
+        def __init__(self, credentials):
+            assert credentials == {"api_key": "token-abc"}
+
+        def verify(self):
+            return True
+
+        def latest_measurements(self):
+            return [
+                DeviceMeasurement(
+                    taken_at=datetime(2026, 7, 1, 9, 30, tzinfo=timezone.utc),
+                    external_id="42:PL2-001",
+                    ph=7.3,
+                    free_chlorine=1.2,
+                    total_alkalinity=105,
+                )
+            ]
+
+    def fake_get_client(provider, credentials):
+        assert provider.value == "poollab"
+        return FakePoolLab(credentials)
+
+    # The connect route and the sync service each import get_client directly.
+    monkeypatch.setattr("app.routes.integrations.get_client", fake_get_client)
+    monkeypatch.setattr("app.sync_service.get_client", fake_get_client)
+
+    resp = client.post(
+        "/pools/new",
+        data={"name": "PoolLab Pool", "volume": "40000", "volume_unit": "litres"},
+        follow_redirects=False,
+    )
+    pool_url = resp.headers["location"]
+    pool_id = pool_url.rsplit("/", 1)[-1]
+
+    # Missing key is rejected before anything is stored.
+    bad = client.post("/integrations/poollab/connect", data={}, follow_redirects=False)
+    assert "error=Enter+your+LabCOM+API+key" in bad.headers["location"].replace("%20", "+")
+
+    ok = client.post(
+        "/integrations/poollab/connect", data={"api_key": "token-abc"}, follow_redirects=False
+    )
+    assert ok.status_code == 303
+    assert "poollab" in ok.headers["location"]
+    page = client.get("/integrations")
+    assert "connected" in page.text
+
+    sync = client.post(
+        "/integrations/poollab/sync", data={"pool_id": pool_id}, follow_redirects=False
+    )
+    assert sync.status_code == 303
+    assert "Synced" in sync.headers["location"].replace("%20", " ")
+
+    pool_page = client.get(pool_url)
+    assert "poollab" in pool_page.text
+    assert "7.3" in pool_page.text
+
+    # Re-syncing the same measurement is idempotent.
+    again = client.post(
+        "/integrations/poollab/sync", data={"pool_id": pool_id}, follow_redirects=False
+    )
+    assert "Synced 0" in again.headers["location"].replace("%20", " ")

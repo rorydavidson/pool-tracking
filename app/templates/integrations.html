@@ -2,7 +2,8 @@
 {% block title %}Devices — {{ app_name }}{% endblock %}
 {% set provider_meta = {
   "aiper": {"name": "Aiper HydroComm", "desc": "Smart pool monitor (pH, ORP, EC/TDS, free chlorine, temperature)."},
-  "blueriiot": {"name": "Blueriiot Blue Connect", "desc": "Pool probe (pH, ORP, temperature, salinity)."}
+  "blueriiot": {"name": "Blueriiot Blue Connect", "desc": "Pool probe (pH, ORP, temperature, salinity)."},
+  "poollab": {"name": "PoolLab (LabCOM)", "desc": "PoolLab 1.0/2.0 photometer readings synced through the LabCOM cloud (pH, chlorine, alkalinity, cyanuric acid and more)."}
 } %}
 {% block content %}
 <div class="page-head"><h1>Connected devices</h1></div>
@@ -71,10 +72,20 @@
       </form>
     {% else %}
       <form method="post" action="/integrations/{{ provider.value }}/connect" class="connect-form">
+        {% if provider.value == "poollab" %}
+        <label for="key_{{ provider.value }}">LabCOM API key</label>
+        <input type="password" id="key_{{ provider.value }}" name="api_key" required
+               autocomplete="off" placeholder="Paste your API token">
+        <p class="muted small">Generate a token by logging in at
+          <a href="https://labcom.cloud" target="_blank" rel="noopener">labcom.cloud</a>
+          (the account used by the LabCOM app) under <em>User settings → API</em>.
+          Measurements must have been synced from the device to the cloud at least once.</p>
+        {% else %}
         <label for="email_{{ provider.value }}">{{ meta.name }} email</label>
         <input type="email" id="email_{{ provider.value }}" name="email" required>
         <label for="pw_{{ provider.value }}">Password</label>
         <input type="password" id="pw_{{ provider.value }}" name="password" required>
+        {% endif %}
         {% if provider.value == "aiper" %}
           <label for="region_{{ provider.value }}">Region</label>
           <select id="region_{{ provider.value }}" name="region">

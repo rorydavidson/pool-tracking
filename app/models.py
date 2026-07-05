@@ -88,12 +88,14 @@ def estimate_volume_litres(
 class Provider(str, enum.Enum):
     aiper = "aiper"
     blueriiot = "blueriiot"
+    poollab = "poollab"
 
 
 class ReadingSource(str, enum.Enum):
     manual = "manual"
     aiper = "aiper"
     blueriiot = "blueriiot"
+    poollab = "poollab"
 
 
 class User(Base):
