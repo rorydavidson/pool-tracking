@@ -9,9 +9,10 @@ fallback assessment used when no Anthropic API key is configured.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 
-from .models import Pool, Reading, SanitizerType
+from .models import MEASUREMENT_FIELDS, Pool, Reading, SanitizerType
 
 
 class Severity(str, Enum):
@@ -111,18 +112,47 @@ TARGET_REFERENCE = {
 }
 
 
+def _as_utc(value: datetime | None) -> datetime:
+    if value is None:  # unflushed Reading (column default not applied yet)
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def last_known_values(
+    readings: list[Reading],
+) -> dict[str, tuple[float, datetime | None]]:
+    """The most recent non-null value of each field, with when it was measured.
+
+    Photometer sources (PoolLab) only measure what was tested in that session,
+    so the newest reading rarely carries every parameter. Assessments use this
+    to carry each parameter forward from the last reading that measured it,
+    rather than only seeing the newest row. Accepts readings in any order.
+    """
+    state: dict[str, tuple[float, datetime | None]] = {}
+    for reading in sorted(readings, key=lambda r: _as_utc(r.taken_at)):
+        for field_name in MEASUREMENT_FIELDS:
+            value = getattr(reading, field_name)
+            if value is not None:
+                state[field_name] = (value, reading.taken_at)
+    return state
+
+
 # --- Deterministic fallback ------------------------------------------------
 # Used only when Claude is unavailable (no ANTHROPIC_API_KEY, or an API error).
 # Intentionally simple: flag out-of-range parameters without dosing maths.
 
 def fallback_assessment(
-    pool: Pool, reading: Reading, reason: str | None = None
+    pool: Pool, readings: list[Reading], reason: str | None = None
 ) -> Assessment:
     """Deterministic range-check assessment used when Claude is unavailable.
 
-    ``reason`` explains *why* AI advice is unavailable so the summary is honest:
-    pass ``None`` (the default) when no API key is configured, or a short message
-    when a configured key's API call failed.
+    ``readings`` is the pool's history (any order); each parameter is checked
+    at its last-known value, noting the test date when it wasn't part of the
+    newest reading. ``reason`` explains *why* AI advice is unavailable so the
+    summary is honest: pass ``None`` (the default) when no API key is
+    configured, or a short message when a configured key's API call failed.
     """
     if reason is None:
         reason = (
@@ -133,14 +163,24 @@ def fallback_assessment(
         source="fallback",
         summary=f"{reason} For now, here is a basic in-range / out-of-range check.",
     )
+    if not readings:
+        return a
 
-    def check(name: str, value: float | None, rng: Range, unit: str = "") -> None:
-        if value is None:
+    values = last_known_values(readings)
+    latest_date = max(_as_utc(r.taken_at) for r in readings).date()
+
+    def check(name: str, field_name: str, rng: Range, unit: str = "") -> None:
+        pair = values.get(field_name)
+        if pair is None:
             return
+        value, measured_at = pair
+        age = ""
+        if measured_at is not None and _as_utc(measured_at).date() != latest_date:
+            age = f" (last measured {_as_utc(measured_at).date().isoformat()})"
         if rng.contains(value):
             a.recommendations.append(
                 Recommendation(name, Severity.ok, f"{name} {value:g}{unit} is in range "
-                               f"({rng.low:g}–{rng.high:g}{unit}).")
+                               f"({rng.low:g}–{rng.high:g}{unit}).{age}".rstrip())
             )
         else:
             direction = "low" if value < rng.low else "high"
@@ -148,25 +188,23 @@ def fallback_assessment(
                 Recommendation(
                     name, Severity.warning,
                     f"{name} {value:g}{unit} is {direction} (target {rng.low:g}–"
-                    f"{rng.high:g}{unit}).",
+                    f"{rng.high:g}{unit}).{age}".rstrip(),
                 )
             )
 
-    check("pH", reading.ph, PH)
-    check("Total alkalinity", reading.total_alkalinity, TOTAL_ALKALINITY, " ppm")
-    check("Calcium hardness", reading.calcium_hardness, CALCIUM_HARDNESS, " ppm")
-    check("Cyanuric acid", reading.cyanuric_acid, cya_range(pool), " ppm")
-    check(
-        "Free chlorine",
-        reading.free_chlorine,
-        free_chlorine_range(pool, reading.cyanuric_acid),
-        " ppm",
-    )
-    if pool.sanitizer == SanitizerType.saltwater:
-        check("Salt", reading.salt, SALT, " ppm")
-    check("ORP", reading.orp, ORP, " mV")
+    cya = values.get("cyanuric_acid", (None, None))[0]
+    free_cl = values.get("free_chlorine", (None, None))[0]
 
-    if reading.free_chlorine is not None and reading.free_chlorine < 0.5:
+    check("pH", "ph", PH)
+    check("Total alkalinity", "total_alkalinity", TOTAL_ALKALINITY, " ppm")
+    check("Calcium hardness", "calcium_hardness", CALCIUM_HARDNESS, " ppm")
+    check("Cyanuric acid", "cyanuric_acid", cya_range(pool), " ppm")
+    check("Free chlorine", "free_chlorine", free_chlorine_range(pool, cya), " ppm")
+    if pool.sanitizer == SanitizerType.saltwater:
+        check("Salt", "salt", SALT, " ppm")
+    check("ORP", "orp", ORP, " mV")
+
+    if free_cl is not None and free_cl < 0.5:
         for r in a.recommendations:
             if r.parameter == "Free chlorine":
                 r.severity = Severity.critical

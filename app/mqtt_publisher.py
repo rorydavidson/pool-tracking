@@ -36,25 +36,10 @@ from sqlalchemy.orm import Session
 
 from .config import Settings
 from .database import SessionLocal
+from .models import MEASUREMENT_FIELDS as _FIELDS
 from .models import Pool, Reading
 
 logger = logging.getLogger("pool_tracking.mqtt")
-
-# Chemistry fields carried in each payload, in the app's canonical units
-# (ppm, mV, µS/cm, °C).
-_FIELDS = (
-    "ph",
-    "free_chlorine",
-    "total_chlorine",
-    "total_alkalinity",
-    "cyanuric_acid",
-    "calcium_hardness",
-    "salt",
-    "orp",
-    "ec",
-    "tds",
-    "temperature_c",
-)
 
 
 def _iso_utc(dt: datetime) -> str:

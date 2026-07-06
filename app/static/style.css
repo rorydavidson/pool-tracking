@@ -249,8 +249,11 @@ button { cursor: pointer; font-family: inherit; }
   display: flex; align-items: center; justify-content: space-between;
   font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;
 }
-.metric-value { font-size: 1.22rem; font-weight: 700; color: var(--accent-dark); }
+.metric-value { display: block; font-size: 1.22rem; font-weight: 700; color: var(--accent-dark); }
 .metric-flag { font-weight: 700; }
+/* Marks a value carried forward from an earlier reading (e.g. an occasional
+   photometer test), showing when it was actually measured. */
+.metric-age { display: block; font-size: 0.68rem; color: var(--muted); }
 .metric--ok { border-left-color: var(--ok); }
 .metric--ok .metric-flag { color: var(--ok); }
 .metric--out {

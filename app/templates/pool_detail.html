@@ -105,24 +105,35 @@
       {% endif %}
       <div class="readings-grid">
         {% set vals = [
-          ("pH", "ph", latest.ph, ""),
-          ("Free Cl", "free_chlorine", latest.free_chlorine, " ppm"),
-          ("Total Cl", "total_chlorine", latest.total_chlorine, " ppm"),
-          ("Alkalinity", "total_alkalinity", latest.total_alkalinity, " ppm"),
-          ("CYA", "cyanuric_acid", latest.cyanuric_acid, " ppm"),
-          ("Calcium", "calcium_hardness", latest.calcium_hardness, " ppm"),
-          ("Salt", "salt", latest.salt, " ppm"),
-          ("ORP", "orp", latest.orp, " mV"),
-          ("EC", "ec", latest.ec, " µS/cm"),
-          ("TDS", "tds", latest.tds, " ppm"),
-          ("Temp", "temperature_c", latest.temperature_c, " °C"),
+          ("pH", "ph", ""),
+          ("Free Cl", "free_chlorine", " ppm"),
+          ("Total Cl", "total_chlorine", " ppm"),
+          ("Alkalinity", "total_alkalinity", " ppm"),
+          ("CYA", "cyanuric_acid", " ppm"),
+          ("Calcium", "calcium_hardness", " ppm"),
+          ("Salt", "salt", " ppm"),
+          ("ORP", "orp", " mV"),
+          ("EC", "ec", " µS/cm"),
+          ("TDS", "tds", " ppm"),
+          ("Temp", "temperature_c", " °C"),
         ] %}
-        {% for label, attr, value, unit in vals %}
-          {% if value is not none %}
+        {# Parameters missing from the newest reading (photometers only test a
+           subset per session) carry forward from the last reading that
+           measured them, marked with the test date. #}
+        {% for label, attr, unit in vals %}
+          {% set pair = last_known.get(attr) %}
+          {% if pair %}
+            {% set value, measured_at = pair %}
             {% set st = metric_status.get(attr) %}
             <div class="metric {{ ('metric--' ~ st) if st }}">
               <span class="metric-label">{{ label }}{% if st %}<span class="metric-flag">{{ '✓' if st == 'ok' else '!' }}</span>{% endif %}</span>
               <span class="metric-value">{{ "%g"|format(value) }}{{ unit }}</span>
+              {# Only date the value when it's from an earlier day; a value
+                 from a few hours ago is effectively current. #}
+              {% if fmt_local(measured_at, pool.timezone, "%Y-%m-%d", label=false)
+                    != fmt_local(latest.taken_at, pool.timezone, "%Y-%m-%d", label=false) %}
+                <span class="metric-age">from {{ fmt_local(measured_at, pool.timezone, "%d %b", label=false) }}</span>
+              {% endif %}
             </div>
           {% endif %}
         {% endfor %}
