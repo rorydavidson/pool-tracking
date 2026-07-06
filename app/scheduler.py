@@ -21,6 +21,7 @@ from .advice import regenerate_pool_advice
 from .config import get_settings
 from .database import SessionLocal
 from .models import Pool, PoolAdvice, ProviderCredential, Reading
+from .mqtt_publisher import MqttPublisher
 from .sync_service import sync_credential
 
 logger = logging.getLogger("pool_tracking.scheduler")
@@ -156,11 +157,21 @@ async def _run_loop() -> None:
     settings = get_settings()
     interval = settings.auto_sync_interval_hours
     advice_enabled = bool(settings.anthropic_api_key)
+    mqtt = MqttPublisher(settings) if settings.mqtt_enabled else None
     logger.info(
-        "Scheduler started (device sync=%sh, twice-daily advice=%s)",
+        "Scheduler started (device sync=%sh, twice-daily advice=%s, mqtt=%s)",
         interval if interval > 0 else "off",
         "on" if advice_enabled else "off (no ANTHROPIC_API_KEY)",
+        f"{settings.mqtt_host} every {settings.mqtt_publish_interval_minutes:g}m"
+        if mqtt else "off",
     )
+    # The MQTT cadence may be shorter than the default wake period; wake often
+    # enough to honour it (bounded below so a tiny value can't spin the loop).
+    check_period = _CHECK_PERIOD_SECONDS
+    if mqtt:
+        check_period = min(
+            check_period, max(60, int(settings.mqtt_publish_interval_minutes * 60))
+        )
     await asyncio.sleep(_STARTUP_DELAY_SECONDS)
     while True:
         try:
@@ -171,19 +182,22 @@ async def _run_loop() -> None:
             if advice_enabled:
                 for pool_id in await asyncio.to_thread(_due_advice_pool_ids):
                     await asyncio.to_thread(_run_advice_one, pool_id)
+            if mqtt and mqtt.due(datetime.now(timezone.utc)):
+                await asyncio.to_thread(mqtt.tick)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
             logger.exception("Scheduler tick failed")
-        await asyncio.sleep(_CHECK_PERIOD_SECONDS)
+        await asyncio.sleep(check_period)
 
 
 def start_scheduler() -> None:
     """Start the background loop.
 
-    The loop drives both device auto-sync (when ``AUTO_SYNC_INTERVAL_HOURS`` > 0)
-    and twice-daily advice regeneration (when an Anthropic key is set). If both
-    are off it still runs but does nothing each tick.
+    The loop drives device auto-sync (when ``AUTO_SYNC_INTERVAL_HOURS`` > 0),
+    twice-daily advice regeneration (when an Anthropic key is set), and MQTT
+    publishing (when ``MQTT_HOST`` is set). If all are off it still runs but
+    does nothing each tick.
     """
     global _task
     if _task is not None and not _task.done():

@@ -39,6 +39,11 @@
       and stay in the server logs / outbox.{% endif %}</li>
     <li><strong>Device clouds</strong> — connecting a device logs in to that vendor's cloud
       (and, for Aiper, AWS IoT) using your account, to read your measurements.</li>
+    {% if mqtt_host %}
+    <li><strong>MQTT broker ({{ mqtt_host }})</strong> — this instance is configured to publish
+      every pool's readings (pool name, timestamps, and measurements — no location or notes) to
+      the broker above on a schedule.</li>
+    {% endif %}
   </ul>
 
   <h2>Exports</h2>

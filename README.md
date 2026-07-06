@@ -185,6 +185,24 @@ out-of-range results (`OVERRANGE`/`UNDERRANGE`), and groups single-parameter
 photometer tests taken within an hour of each other into one reading per test
 session.
 
+### MQTT publishing
+
+Set `MQTT_HOST` (plus optional `MQTT_PORT`, `MQTT_USERNAME`/`MQTT_PASSWORD`,
+`MQTT_USE_TLS`, `MQTT_TOPIC_PREFIX`) and the background scheduler pushes
+readings to your broker every `MQTT_PUBLISH_INTERVAL_MINUTES` (default 15),
+for consumption by Home Assistant, Node-RED and the like:
+
+- `pool_tracking/<pool_id>/readings` — each reading stored since the last
+  publish, oldest first (QoS 1). Watermarked by row id, so history backfilled
+  by a device sync or import is published too.
+- `pool_tracking/<pool_id>/latest` — the pool's most recent reading (QoS 1,
+  **retained**), so a new subscriber immediately gets current state.
+
+Payloads are JSON with the pool id/name, reading id, `taken_at` (UTC ISO-8601),
+`source`, and every chemistry field in the app's canonical units (null when the
+reading lacks one). Publish failures are retried on the next interval; nothing
+is dropped while the broker is unreachable (except across an app restart).
+
 ### Weather and timezone
 
 When a pool has a location, the daily weather for each reading date is fetched from
