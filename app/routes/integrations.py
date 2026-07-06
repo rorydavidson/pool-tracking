@@ -51,9 +51,10 @@ def integrations_page(
 @router.post("/integrations/{provider}/connect")
 def connect(
     provider: str,
-    email: str = Form(...),
-    password: str = Form(...),
+    email: str = Form(""),
+    password: str = Form(""),
     region: str = Form("eu"),
+    api_key: str = Form(""),
     user=Depends(auth.current_user),
     db: Session = Depends(get_db),
 ):
@@ -61,9 +62,21 @@ def connect(
         return RedirectResponse("/login", status_code=303)
     prov = Provider(provider)
 
-    payload = {"email": email.strip(), "password": password}
-    if region.strip():
-        payload["region"] = region.strip()
+    # PoolLab uses a LabCOM API token; the other providers use account logins.
+    if prov == Provider.poollab:
+        if not api_key.strip():
+            return RedirectResponse(
+                "/integrations?error=Enter your LabCOM API key", status_code=303
+            )
+        payload = {"api_key": api_key.strip()}
+    else:
+        if not email.strip() or not password:
+            return RedirectResponse(
+                "/integrations?error=Enter your email and password", status_code=303
+            )
+        payload = {"email": email.strip(), "password": password}
+        if region.strip():
+            payload["region"] = region.strip()
 
     # Verify the credentials before saving so we don't store bad logins silently.
     try:

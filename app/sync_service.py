@@ -20,6 +20,7 @@ from .security import decrypt_json
 PROVIDER_SOURCE = {
     Provider.aiper: ReadingSource.aiper,
     Provider.blueriiot: ReadingSource.blueriiot,
+    Provider.poollab: ReadingSource.poollab,
 }
 
 
