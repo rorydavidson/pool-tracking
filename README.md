@@ -199,9 +199,23 @@ for consumption by Home Assistant, Node-RED and the like:
   **retained**), so a new subscriber immediately gets current state.
 
 Payloads are JSON with the pool id/name, reading id, `taken_at` (UTC ISO-8601),
-`source`, and every chemistry field in the app's canonical units (null when the
-reading lacks one). Publish failures are retried on the next interval; nothing
-is dropped while the broker is unreachable (except across an app restart).
+`source`, and the chemistry fields in the app's canonical units. Because
+different sources measure different subsets, every message carries the pool's
+**last-known value for each measurement** (as of that reading's time), each
+paired with a `<field>_measured_at` timestamp so consumers can tell how fresh
+it is; fields the pool has never measured are omitted rather than null:
+
+```json
+{
+  "pool_id": 1, "pool_name": "Garden Pool", "reading_id": 42,
+  "taken_at": "2026-07-06T10:00:00+00:00", "source": "poollab", "external_id": "…",
+  "ph": 7.3, "ph_measured_at": "2026-07-06T10:00:00+00:00",
+  "total_alkalinity": 105.0, "total_alkalinity_measured_at": "2026-07-01T09:15:00+00:00"
+}
+```
+
+Publish failures are retried on the next interval; nothing is dropped while
+the broker is unreachable (except across an app restart).
 
 #### Using with Home Assistant
 
@@ -255,6 +269,15 @@ Point the app at the same broker Home Assistant uses — with Home Assistant OS
          state_topic: "pool_tracking/1/latest"
          value_template: "{{ value_json.taken_at }}"
          device_class: timestamp
+
+       # Each measurement also carries its own timestamp, so you can track
+       # when a value was actually tested (useful for occasional photometer
+       # parameters like CYA that persist across readings).
+       - name: "Pool pH measured at"
+         unique_id: pool_1_ph_measured_at
+         state_topic: "pool_tracking/1/latest"
+         value_template: "{{ value_json.ph_measured_at }}"
+         device_class: timestamp
    ```
 
    Add more of the same for `total_alkalinity`, `cyanuric_acid`,
@@ -263,11 +286,13 @@ Point the app at the same broker Home Assistant uses — with Home Assistant OS
    All YAML configuration*) or restart Home Assistant.
 
 Because `latest` is retained, the sensors populate as soon as Home Assistant
-subscribes — no need to wait for the next reading. Fields a reading doesn't
-include come through as null and show as `unknown` until a reading measures
-them; if your sources always report the same subset, only define sensors for
-those fields. Automations can also trigger on every stored reading via the
-`pool_tracking/1/readings` stream topic.
+subscribes — no need to wait for the next reading. Values persist across
+readings that don't re-measure them (the message always carries the last-known
+value per field, with its `<field>_measured_at`), so sensors don't flap to
+`unknown` between test sessions. A field the pool has *never* measured is
+absent from the payload and its sensor stays `unknown` — only define sensors
+for fields your sources report. Automations can also trigger on every stored
+reading via the `pool_tracking/1/readings` stream topic.
 
 ### Weather and timezone
 

@@ -13,6 +13,12 @@ Every ``MQTT_PUBLISH_INTERVAL_MINUTES`` the scheduler calls
   retained), republished whenever it changes, so a subscriber always has
   current state without waiting for the next reading.
 
+Different sources measure different subsets of fields, so each message
+carries the pool's last-known value for every measurement as of that
+reading's time, each with a ``<field>_measured_at`` timestamp; fields the
+pool has never measured are omitted (never null). That way a consumer always
+sees the full water picture per message and can tell how fresh each value is.
+
 State is in-memory: publish failures leave it untouched (everything is
 retried next tick), and a restart re-seeds the retained topics and resumes
 the stream from the current row id (rows stored while the app was down are
@@ -35,8 +41,7 @@ from .models import Pool, Reading
 logger = logging.getLogger("pool_tracking.mqtt")
 
 # Chemistry fields carried in each payload, in the app's canonical units
-# (ppm, mV, µS/cm, °C). Always present, null when the reading lacks them, so
-# consumers can rely on stable keys.
+# (ppm, mV, µS/cm, °C).
 _FIELDS = (
     "ph",
     "free_chlorine",
@@ -58,7 +63,14 @@ def _iso_utc(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat()
 
 
-def reading_payload(pool: Pool, reading: Reading) -> dict:
+def reading_payload(
+    pool: Pool, reading: Reading, state: dict[str, tuple[float, datetime]]
+) -> dict:
+    """Build a message for ``reading`` carrying the last-known measurements.
+
+    ``state`` maps each field to its most recent (value, measured-at) as of
+    this reading. Fields never measured are omitted rather than null.
+    """
     payload = {
         "pool_id": pool.id,
         "pool_name": pool.name,
@@ -68,7 +80,10 @@ def reading_payload(pool: Pool, reading: Reading) -> dict:
         "external_id": reading.external_id,
     }
     for field in _FIELDS:
-        payload[field] = getattr(reading, field)
+        if field in state:
+            value, measured_at = state[field]
+            payload[field] = value
+            payload[f"{field}_measured_at"] = _iso_utc(measured_at)
     return payload
 
 
@@ -131,37 +146,52 @@ class MqttPublisher:
 
         max_row_id = db.scalar(select(func.max(Reading.id))) or 0
 
-        # Stream every reading stored since the last tick. On the first tick
+        # Rows stored since the last tick, streamed below. On the first tick
         # there is no watermark yet: skip the stream (don't replay history)
-        # and let the retained /latest seeding below cover current state.
+        # and let the retained /latest seeding cover current state.
+        new_ids: set[int] = set()
         if self._max_row_id is not None and max_row_id > self._max_row_id:
-            new_rows = db.scalars(
-                select(Reading)
-                .where(Reading.id > self._max_row_id)
-                .order_by(Reading.taken_at.asc(), Reading.id.asc())
-            ).all()
-            for reading in new_rows:
-                messages.append({
-                    "topic": f"{prefix}/{reading.pool_id}/readings",
-                    "payload": json.dumps(reading_payload(reading.pool, reading)),
-                    "qos": 1,
-                    "retain": False,
-                })
+            new_ids = set(
+                db.scalars(select(Reading.id).where(Reading.id > self._max_row_id))
+            )
 
-        # Refresh each pool's retained /latest when it changed (or on seed).
         latest_sent: dict[int, int] = {}
         for pool in db.scalars(select(Pool)).all():
-            latest = db.scalar(
+            readings = db.scalars(
                 select(Reading)
                 .where(Reading.pool_id == pool.id)
-                .order_by(Reading.taken_at.desc(), Reading.id.desc())
-                .limit(1)
-            )
-            if latest is None or self._latest_sent.get(pool.id) == latest.id:
+                .order_by(Reading.taken_at.asc(), Reading.id.asc())
+            ).all()
+            if not readings:
                 continue
+            latest = readings[-1]
+            pool_has_new = any(r.id in new_ids for r in readings)
+            # Refresh the retained /latest when the newest reading changed, or
+            # when a backfilled row may have filled in a missing measurement.
+            need_latest = pool_has_new or self._latest_sent.get(pool.id) != latest.id
+            if not need_latest:
+                continue
+
+            # Walk the pool's history in time order, tracking the most recent
+            # value of each field, so every message carries the last-known
+            # measurements as of that reading (backfilled rows included).
+            state: dict[str, tuple[float, datetime]] = {}
+            for reading in readings:
+                for field in _FIELDS:
+                    value = getattr(reading, field)
+                    if value is not None:
+                        state[field] = (value, reading.taken_at)
+                if reading.id in new_ids:
+                    messages.append({
+                        "topic": f"{prefix}/{pool.id}/readings",
+                        "payload": json.dumps(reading_payload(pool, reading, state)),
+                        "qos": 1,
+                        "retain": False,
+                    })
+
             messages.append({
                 "topic": f"{prefix}/{pool.id}/latest",
-                "payload": json.dumps(reading_payload(pool, latest)),
+                "payload": json.dumps(reading_payload(pool, latest, state)),
                 "qos": 1,
                 "retain": True,
             })
