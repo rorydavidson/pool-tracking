@@ -9,7 +9,7 @@ import pytest
 from app.config import Settings
 from app.database import SessionLocal
 from app.models import Pool, Reading, ReadingSource, User
-from app.mqtt_publisher import MqttPublisher, reading_payload
+from app.mqtt_publisher import MqttPublisher
 
 T0 = datetime(2026, 7, 1, 9, 0, tzinfo=timezone.utc)
 
@@ -58,16 +58,26 @@ def _topics(batch, pool):
     return [m["topic"] for m in batch if f"/{pool.id}/" in m["topic"]]
 
 
-def test_payload_has_stable_keys(db, pool):
-    r = _add_reading(db, pool, T0, ph=7.2, free_chlorine=1.5)
-    payload = reading_payload(pool, r)
+def test_latest_merges_last_known_values_with_timestamps(monkeypatch, db, pool):
+    _add_reading(db, pool, T0, ph=7.0, total_alkalinity=100)
+    r2 = _add_reading(db, pool, T0 + timedelta(hours=1), ph=7.4, free_chlorine=1.5)
+    sent = []
+    pub = _publisher(monkeypatch, sent)
+    pub.tick()
+    latest = [m for m in sent[0][0] if m["topic"] == f"test_mqtt/{pool.id}/latest"]
+    payload = json.loads(latest[0]["payload"])
     assert payload["pool_name"] == "MQTT Pool"
-    assert payload["taken_at"] == "2026-07-01T09:00:00+00:00"
-    assert payload["source"] == "manual"
-    assert payload["ph"] == 7.2
-    # Unmeasured fields are present and null so consumers get stable keys.
-    assert payload["salt"] is None
-    assert "temperature_c" in payload
+    assert payload["reading_id"] == r2.id
+    assert payload["taken_at"] == "2026-07-01T10:00:00+00:00"
+    # Current values from the newest reading...
+    assert payload["ph"] == 7.4
+    assert payload["ph_measured_at"] == "2026-07-01T10:00:00+00:00"
+    # ...alkalinity carried forward from the earlier reading, with its time...
+    assert payload["total_alkalinity"] == 100
+    assert payload["total_alkalinity_measured_at"] == "2026-07-01T09:00:00+00:00"
+    # ...and never-measured fields omitted entirely, not null.
+    assert "salt" not in payload
+    assert "salt_measured_at" not in payload
 
 
 def test_first_tick_seeds_retained_latest_only(monkeypatch, db, pool):
@@ -96,30 +106,46 @@ def test_new_readings_stream_and_latest_update(monkeypatch, db, pool):
     assert pub.tick() == 0
 
     r1 = _add_reading(db, pool, T0 + timedelta(hours=1), ph=7.2)
-    r2 = _add_reading(db, pool, T0 + timedelta(hours=2), ph=7.4)
+    r2 = _add_reading(db, pool, T0 + timedelta(hours=2), free_chlorine=1.4)
     pub.tick()
     batch = sent[-1][0]
     stream = [m for m in batch if m["topic"] == f"test_mqtt/{pool.id}/readings"]
     assert [json.loads(m["payload"])["reading_id"] for m in stream] == [r1.id, r2.id]
     assert all(m["retain"] is False for m in stream)
+    # The chlorine-only reading still carries the last-known pH.
+    r2_payload = json.loads(stream[1]["payload"])
+    assert r2_payload["free_chlorine"] == 1.4
+    assert r2_payload["ph"] == 7.2
+    assert r2_payload["ph_measured_at"] == "2026-07-01T10:00:00+00:00"
     latest = [m for m in batch if m["topic"] == f"test_mqtt/{pool.id}/latest"]
     assert json.loads(latest[0]["payload"])["reading_id"] == r2.id
 
 
 def test_backfilled_history_is_streamed(monkeypatch, db, pool):
-    _add_reading(db, pool, T0, ph=7.0)
+    newest = _add_reading(db, pool, T0, ph=7.0)
     sent = []
     pub = _publisher(monkeypatch, sent)
     pub.tick()  # seed
 
-    # A device sync imports an *older* reading: still published (id watermark),
-    # but the retained latest is untouched (it's not the newest by taken_at).
-    old = _add_reading(db, pool, T0 - timedelta(days=30), ph=6.8)
+    # A device sync imports an *older* reading: still published (id watermark).
+    old = _add_reading(db, pool, T0 - timedelta(days=30), salt=3200)
     pub.tick()
-    batch = sent[-1][0]
-    topics = _topics(batch, pool)
-    assert topics == [f"test_mqtt/{pool.id}/readings"]
-    assert json.loads(batch[0]["payload"])["reading_id"] == old.id
+    batch = [m for m in sent[-1][0] if f"/{pool.id}/" in m["topic"]]
+    stream = [m for m in batch if m["topic"] == f"test_mqtt/{pool.id}/readings"]
+    old_payload = json.loads(stream[0]["payload"])
+    assert old_payload["reading_id"] == old.id
+    # As of that old reading, pH hadn't been measured yet.
+    assert old_payload["salt"] == 3200
+    assert "ph" not in old_payload
+    # The retained latest is republished so it picks up the backfilled salt,
+    # while staying anchored to the newest reading.
+    latest_payload = json.loads(
+        [m for m in batch if m["topic"] == f"test_mqtt/{pool.id}/latest"][0]["payload"]
+    )
+    assert latest_payload["reading_id"] == newest.id
+    assert latest_payload["ph"] == 7.0
+    assert latest_payload["salt"] == 3200
+    assert latest_payload["salt_measured_at"] == "2026-06-01T09:00:00+00:00"
 
 
 def test_failed_publish_retries_next_tick(monkeypatch, db, pool):
