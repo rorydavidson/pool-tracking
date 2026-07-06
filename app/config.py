@@ -26,6 +26,18 @@ class Settings(BaseSettings):
     # disable the background scheduler entirely (manual sync still works).
     auto_sync_interval_hours: float = 1.0
 
+    # MQTT publishing. When a host is set, the scheduler publishes readings to
+    # the broker every MQTT_PUBLISH_INTERVAL_MINUTES (new readings as a stream,
+    # plus a retained latest-reading topic per pool). Leave the host empty to
+    # disable.
+    mqtt_host: str = ""
+    mqtt_port: int = 1883
+    mqtt_username: str = ""
+    mqtt_password: str = ""
+    mqtt_use_tls: bool = False
+    mqtt_topic_prefix: str = "pool_tracking"
+    mqtt_publish_interval_minutes: float = 15.0
+
     # Email / magic link.
     # Delivery provider is chosen automatically: Resend if an API key is set,
     # else SMTP if a host is set, else console (link logged + saved to outbox).
@@ -64,6 +76,10 @@ class Settings(BaseSettings):
         if self.smtp_host:
             return "smtp"
         return "console"
+
+    @property
+    def mqtt_enabled(self) -> bool:
+        return bool(self.mqtt_host) and self.mqtt_publish_interval_minutes > 0
 
     @property
     def email_enabled(self) -> bool:

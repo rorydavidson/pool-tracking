@@ -32,6 +32,7 @@ def privacy(request: Request, user=Depends(auth.current_user)):
             "user": user,
             "claude_enabled": bool(settings.anthropic_api_key),
             "email_provider": settings.email_provider,
+            "mqtt_host": settings.mqtt_host if settings.mqtt_enabled else "",
         },
     )
 
