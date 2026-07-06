@@ -13,11 +13,17 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-def fmt_local(value: dt.datetime | None, tzname: str | None, fmt: str = "%Y-%m-%d %H:%M") -> str:
+def fmt_local(
+    value: dt.datetime | None,
+    tzname: str | None,
+    fmt: str = "%Y-%m-%d %H:%M",
+    label: bool = True,
+) -> str:
     """Format a (UTC) datetime in ``tzname``, appending a short tz label.
 
     Falls back to UTC when no/invalid timezone is given. Naive datetimes are
-    assumed to be UTC (that's how the app stores them).
+    assumed to be UTC (that's how the app stores them). Pass ``label=False``
+    to omit the tz label (e.g. for date-only formats).
     """
     if value is None:
         return "—"
@@ -30,8 +36,10 @@ def fmt_local(value: dt.datetime | None, tzname: str | None, fmt: str = "%Y-%m-%
         except (ZoneInfoNotFoundError, ValueError):
             tz = dt.timezone.utc
     local = value.astimezone(tz)
-    label = local.tzname() or ("UTC" if tz is dt.timezone.utc else tzname or "UTC")
-    return f"{local.strftime(fmt)} {label}"
+    if not label:
+        return local.strftime(fmt)
+    tz_label = local.tzname() or ("UTC" if tz is dt.timezone.utc else tzname or "UTC")
+    return f"{local.strftime(fmt)} {tz_label}"
 
 # Badge colour per severity, used by templates.
 _SEVERITY_CLASS = {

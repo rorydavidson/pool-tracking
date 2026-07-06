@@ -263,9 +263,11 @@ def pool_detail(
     assessment = deserialise_assessment(pool.advice.payload) if pool.advice else None
     advice_generated_at = pool.advice.generated_at if pool.advice else None
 
-    # Per-metric in/out-of-range status for the latest reading, so the dashboard
-    # tiles can be colour-coded.
+    # Per-metric in/out-of-range status and last-known values (parameters not
+    # in the newest reading carry forward from the last reading that measured
+    # them), so the dashboard tiles show the full water picture colour-coded.
     metric_status = _metric_status(pool, list(readings))
+    last_known = chemistry.last_known_values(list(readings))
 
     # The pool page shows only today's readings (pool-local date); the full
     # history lives on the analysis page, grouped by week.
@@ -283,6 +285,7 @@ def pool_detail(
             "assessment": assessment,
             "advice_generated_at": advice_generated_at,
             "metric_status": metric_status,
+            "last_known": last_known,
             "weather": weather_by_date,
             "today": today,
             "flash": request.query_params.get("flash"),
@@ -292,19 +295,24 @@ def pool_detail(
 
 
 def _metric_status(pool: Pool, readings: list[Reading]) -> dict[str, str]:
-    """Map each measured field of the latest reading to 'ok' or 'out' vs target."""
+    """Map each parameter's last-known value to 'ok' or 'out' vs target.
+
+    Values carry forward from the last reading that measured them — photometer
+    sources only test a subset per session, so the newest reading rarely has
+    every field.
+    """
     if not readings:
         return {}
-    latest = readings[0]
-    latest_cya = next((r.cyanuric_acid for r in readings if r.cyanuric_acid is not None), None)
+    values = chemistry.last_known_values(readings)
+    latest_cya = values.get("cyanuric_acid", (None, None))[0]
     status: dict[str, str] = {}
     for attr in ("ph", "free_chlorine", "total_alkalinity", "cyanuric_acid",
                  "calcium_hardness", "salt", "orp"):
-        value = getattr(latest, attr)
+        pair = values.get(attr)
         target = _target_for(attr, pool, latest_cya)
-        if value is None or target is None:
+        if pair is None or target is None:
             continue
-        status[attr] = "ok" if target[0] <= value <= target[1] else "out"
+        status[attr] = "ok" if target[0] <= pair[0] <= target[1] else "out"
     return status
 
 

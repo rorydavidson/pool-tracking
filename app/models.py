@@ -175,6 +175,23 @@ class Pool(Base):
     )
 
 
+# The chemistry fields a Reading can carry, in canonical units. Shared by the
+# assessment carry-forward logic and the MQTT payloads.
+MEASUREMENT_FIELDS = (
+    "ph",
+    "free_chlorine",
+    "total_chlorine",
+    "total_alkalinity",
+    "cyanuric_acid",
+    "calcium_hardness",
+    "salt",
+    "orp",
+    "ec",
+    "tds",
+    "temperature_c",
+)
+
+
 class Reading(Base):
     """A set of water measurements taken at a point in time.
 

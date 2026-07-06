@@ -211,6 +211,48 @@ def test_cannot_view_another_users_pool(logged_in_client):
     assert other.headers["location"] == "/login"
 
 
+def test_pool_page_carries_forward_sparse_measurements(logged_in_client):
+    """A parameter missing from the newest reading still shows, with its date."""
+    client = logged_in_client
+    resp = client.post(
+        "/pools/new",
+        data={"name": "Carry Pool", "volume": "30000", "volume_unit": "litres"},
+        follow_redirects=False,
+    )
+    pool_url = resp.headers["location"]
+
+    # An alkalinity test some days ago, then a pH-only reading today.
+    client.post(f"{pool_url}/readings/new", data={"total_alkalinity": "95"})
+    client.post(f"{pool_url}/readings/new", data={"ph": "7.4"})
+
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from app.database import SessionLocal
+    from app.models import Reading
+
+    pool_id = int(pool_url.rsplit("/", 1)[-1])
+    db = SessionLocal()
+    try:
+        ta_reading = db.scalar(
+            select(Reading).where(
+                Reading.pool_id == pool_id, Reading.total_alkalinity.is_not(None)
+            )
+        )
+        ta_reading.taken_at = ta_reading.taken_at - timedelta(days=5)
+        db.commit()
+    finally:
+        db.close()
+
+    page = client.get(pool_url)
+    assert page.status_code == 200
+    # Alkalinity is still on the latest-reading panel, dated as carried.
+    assert "Alkalinity" in page.text
+    assert "95 ppm" in page.text
+    assert "metric-age" in page.text
+
+
 def test_integrations_page_lists_providers(logged_in_client):
     page = logged_in_client.get("/integrations")
     assert page.status_code == 200

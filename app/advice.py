@@ -58,10 +58,18 @@ the product and dose where relevant, what to do (pump running, add to water, add
 gradually), and when to re-test. If the water is already balanced, give at most \
 one light maintenance step or leave it empty.
 - Use ALL the readings provided. The input includes the latest reading, every \
-reading taken so far today, and recent daily history. Compare today's readings \
-to spot intra-day movement (e.g. chlorine falling through a hot afternoon) and \
-compare against recent days for slower trends. Base the dosing on the latest \
-reading but explain any trend you see.
+reading taken so far today, recent daily history, and "last_known_values" — \
+the most recent measurement of each parameter with when it was taken. Sources \
+differ in what they measure (a photometer session only contains what was \
+tested that day), so parameters like alkalinity, stabiliser or hardness are \
+often missing from the latest reading; assess them from last_known_values \
+instead of treating them as untested. Weigh staleness: slow-moving parameters \
+(alkalinity, CYA, hardness, salt) can be trusted for a couple of weeks, while \
+a chlorine or pH value more than a day or two old should prompt a re-test \
+rather than a dose. Compare today's readings to spot intra-day movement (e.g. \
+chlorine falling through a hot afternoon) and compare against recent days for \
+slower trends. Base the dosing on the latest value of each parameter but \
+explain any trend you see.
 - Two kinds of owner context may be supplied, and they mean different things. \
 "owner_notes" is a single free-text description of the pool's current state or \
 surroundings (e.g. "near oak trees", "cover left off"). "context_log" is a dated \
@@ -140,22 +148,25 @@ def _severity(value: str) -> Severity:
         return Severity.warning
 
 
+# Reading attribute -> payload key (with the unit spelled out for Claude).
+_FIELD_KEYS = {
+    "ph": "pH",
+    "free_chlorine": "free_chlorine_ppm",
+    "total_chlorine": "total_chlorine_ppm",
+    "total_alkalinity": "total_alkalinity_ppm",
+    "cyanuric_acid": "cyanuric_acid_ppm",
+    "calcium_hardness": "calcium_hardness_ppm",
+    "salt": "salt_ppm",
+    "orp": "orp_mv",
+    "ec": "ec_us_cm",
+    "tds": "tds_ppm",
+    "temperature_c": "temperature_c",
+}
+
+
 def _reading_to_dict(r: Reading, weather: dict | None = None) -> dict:
-    fields = {
-        "ph": "pH",
-        "free_chlorine": "free_chlorine_ppm",
-        "total_chlorine": "total_chlorine_ppm",
-        "total_alkalinity": "total_alkalinity_ppm",
-        "cyanuric_acid": "cyanuric_acid_ppm",
-        "calcium_hardness": "calcium_hardness_ppm",
-        "salt": "salt_ppm",
-        "orp": "orp_mv",
-        "ec": "ec_us_cm",
-        "tds": "tds_ppm",
-        "temperature_c": "temperature_c",
-    }
     out: dict = {"taken_at": r.taken_at.isoformat(), "source": r.source.value}
-    for attr, key in fields.items():
+    for attr, key in _FIELD_KEYS.items():
         val = getattr(r, attr)
         if val is not None:
             out[key] = val
@@ -248,10 +259,30 @@ def _build_pool_payload(
         "context_log": _context_log(context_notes),
         "local_date": today.isoformat(),
         "latest_reading": _reading_to_dict(readings[0], weather) if readings else None,
+        "last_known_values": _last_known_to_dict(readings),
         "readings_today": [_reading_to_dict(r, weather) for r in todays_readings],
         "recent_history": [_reading_to_dict(r, weather) for r in readings[1:15]],
     }
     return json.dumps(payload, indent=2)
+
+
+def _last_known_to_dict(readings: list[Reading]) -> dict:
+    """Each parameter's most recent value and test time, across all readings.
+
+    Photometer sources only measure what was tested that session, so the
+    latest reading alone under-reports slow-moving parameters like alkalinity.
+    """
+    values = chemistry.last_known_values(readings)
+    out = {}
+    for attr, key in _FIELD_KEYS.items():
+        pair = values.get(attr)
+        if pair is not None:
+            value, measured_at = pair
+            out[key] = {
+                "value": value,
+                "measured_at": measured_at.isoformat() if measured_at else None,
+            }
+    return out
 
 
 def generate_advice(
@@ -276,7 +307,7 @@ def generate_advice(
         return Assessment(summary="No readings yet — add a water test to get advice.")
 
     if not settings.anthropic_api_key:
-        return chemistry.fallback_assessment(pool, readings[0])
+        return chemistry.fallback_assessment(pool, readings)
 
     try:
         return _generate_with_claude(pool, readings, weather, notes, context_notes, settings)
@@ -284,7 +315,7 @@ def generate_advice(
         logger.exception("Claude advice generation failed; using fallback")
         return chemistry.fallback_assessment(
             pool,
-            readings[0],
+            readings,
             reason=(
                 "AI advice could not be generated just now (the Claude request "
                 f"failed: {_short_error(exc)}). Press Refresh to try again."
