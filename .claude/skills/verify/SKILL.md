@@ -36,6 +36,15 @@ curl -s -b /tmp/j -c /tmp/j "http://127.0.0.1:8000$LINK"   # 303 → logged in
 - Full readings history renders on `/pools/{id}/analysis` (the pool page's
   history panel shows **today only**); JSON at `/pools/{id}/export`.
 
+## MQTT publishing
+
+`apt-get install -y mosquitto mosquitto-clients`, run
+`mosquitto -c <(printf 'listener 1883 127.0.0.1\nallow_anonymous true\n')`,
+subscribe with `mosquitto_sub -h 127.0.0.1 -t 'pool_tracking/#' -v`, and launch
+the app with `MQTT_HOST=127.0.0.1 MQTT_PUBLISH_INTERVAL_MINUTES=0.5`. Override
+`app.scheduler._STARTUP_DELAY_SECONDS = 2` in a launcher script to avoid the
+45 s first-tick wait; ticks then land every 60 s (the loop's minimum wake).
+
 ## Gotchas
 
 - Device adapters call vendor clouds directly (module-level `httpx`). To verify
