@@ -203,6 +203,72 @@ Payloads are JSON with the pool id/name, reading id, `taken_at` (UTC ISO-8601),
 reading lacks one). Publish failures are retried on the next interval; nothing
 is dropped while the broker is unreachable (except across an app restart).
 
+#### Using with Home Assistant
+
+Point the app at the same broker Home Assistant uses — with Home Assistant OS
+(hass.io) that's usually the **Mosquitto broker** add-on:
+
+1. In Home Assistant: *Settings → Add-ons → Mosquitto broker* (install and
+   start it), then *Settings → Devices & Services* and configure the **MQTT**
+   integration to use it. Create a Home Assistant user for this app to log in
+   with (the add-on accepts any HA user).
+2. In this app's `.env`, point at the broker and restart:
+
+   ```bash
+   MQTT_HOST=homeassistant.local   # or the HA IP
+   MQTT_PORT=1883
+   MQTT_USERNAME=pool-tracking     # the HA user you created
+   MQTT_PASSWORD=...
+   ```
+
+3. Define sensors that read from the retained `latest` topic. Your pool's id
+   is in its page URL (`/pools/1` → topic `pool_tracking/1/latest`). In
+   `configuration.yaml`:
+
+   ```yaml
+   mqtt:
+     sensor:
+       - name: "Pool pH"
+         unique_id: pool_1_ph
+         state_topic: "pool_tracking/1/latest"
+         value_template: "{{ value_json.ph }}"
+         device_class: ph
+         state_class: measurement
+
+       - name: "Pool free chlorine"
+         unique_id: pool_1_free_chlorine
+         state_topic: "pool_tracking/1/latest"
+         value_template: "{{ value_json.free_chlorine }}"
+         unit_of_measurement: "ppm"
+         state_class: measurement
+
+       - name: "Pool temperature"
+         unique_id: pool_1_temperature
+         state_topic: "pool_tracking/1/latest"
+         value_template: "{{ value_json.temperature_c }}"
+         device_class: temperature
+         unit_of_measurement: "°C"
+         state_class: measurement
+
+       - name: "Pool last reading"
+         unique_id: pool_1_last_reading
+         state_topic: "pool_tracking/1/latest"
+         value_template: "{{ value_json.taken_at }}"
+         device_class: timestamp
+   ```
+
+   Add more of the same for `total_alkalinity`, `cyanuric_acid`,
+   `calcium_hardness`, `salt` (all ppm), `orp` (mV), `ec` (µS/cm) or `tds`
+   (ppm) as your devices report them. Reload YAML (*Developer tools → YAML →
+   All YAML configuration*) or restart Home Assistant.
+
+Because `latest` is retained, the sensors populate as soon as Home Assistant
+subscribes — no need to wait for the next reading. Fields a reading doesn't
+include come through as null and show as `unknown` until a reading measures
+them; if your sources always report the same subset, only define sensors for
+those fields. Automations can also trigger on every stored reading via the
+`pool_tracking/1/readings` stream topic.
+
 ### Weather and timezone
 
 When a pool has a location, the daily weather for each reading date is fetched from
