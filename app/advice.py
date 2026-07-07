@@ -357,9 +357,13 @@ def _generate_with_claude(
     # standard dosing formulas) and from not using adaptive extended thinking,
     # whose variable reasoning made advice drift between runs. Reasoning depth is
     # governed by `effort`.
+    # `effort`-governed reasoning is spent from the same `max_tokens` budget as
+    # the visible output, so the cap must leave room for both the thinking and
+    # the full structured JSON. Too low and the response is truncated
+    # (stop_reason "max_tokens") and comes back with no parsed_output.
     response = client.messages.parse(
         model=settings.advice_model,
-        max_tokens=4000,
+        max_tokens=8000,
         output_config={"effort": settings.advice_effort},
         system=[
             {
@@ -373,6 +377,14 @@ def _generate_with_claude(
     )
 
     result = response.parsed_output
+    if result is None:
+        # No structured output — usually a truncated response. Surface why so the
+        # caller's fallback message is useful rather than an opaque AttributeError.
+        stop = getattr(response, "stop_reason", None)
+        raise RuntimeError(
+            f"Claude returned no structured advice (stop_reason={stop!r}); "
+            "the response may have been truncated."
+        )
     assessment = Assessment(
         summary=result.summary, source="claude", next_steps=list(result.next_steps)
     )
