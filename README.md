@@ -82,7 +82,7 @@ All configuration is via environment variables (see `.env.example`):
 | `APP_SECRET` | Signs sessions & magic-link tokens, and derives the key that encrypts stored device credentials. **Set this.** |
 | `BASE_URL` | Public URL used to build login links (e.g. `https://pool.example.com`). |
 | `ANTHROPIC_API_KEY` | Enables Claude advice and test-strip reading. Without it, a basic fallback is used. |
-| `ADVICE_MODEL` / `ADVICE_EFFORT` | Claude model (default `claude-opus-4-8`) and thinking effort (`low`/`medium`/`high`/`max`). |
+| `ADVICE_MODEL` / `ADVICE_EFFORT` | Claude model (default `claude-sonnet-5`) and thinking effort (`low`/`medium`/`high`/`max`). |
 | `AUTO_SYNC_INTERVAL_HOURS` | How often the background scheduler syncs auto-enabled devices (default `1`; `0` disables it). |
 | `RESEND_API_KEY` | Send magic-link emails via [Resend](https://resend.com). Takes priority over SMTP. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS` | SMTP delivery, used when `RESEND_API_KEY` is empty. |

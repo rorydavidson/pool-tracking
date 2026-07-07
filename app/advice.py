@@ -41,14 +41,20 @@ for THIS pool's volume and a named product (e.g. calcium hypochlorite, liquid \
 chlorine, sodium bicarbonate, soda ash, muriatic acid, cyanuric acid, calcium \
 chloride, pool salt). Estimate conservatively, tell the owner to add gradually \
 with the pump running, and to re-test before adding more.
-- Severity levels: "ok" (in range), "low" (minor/informational), "warning" \
-(out of range, act soon), "critical" (unsafe to swim or risk of damage, act now). \
-Free chlorine below ~0.5 ppm is critical (water is effectively unsanitised).
-- Always include the safety basics: never mix pool chemicals together, add \
-chemicals to water (not water to chemicals), and keep swimmers out until levels \
-are safe.
+- Severity levels: "ok" (in range), "low" (slightly off or informational, no \
+rush), "warning" (out of range, worth correcting over the next day or two), \
+"critical" (reserved for genuinely unsafe water or a real risk of equipment or \
+surface damage). Use "critical" sparingly. Most out-of-range readings are just \
+"warning": the water is usually still fine to swim in and simply needs some \
+attention, so say that plainly and keep a calm, reassuring tone rather than \
+alarming the owner. Treat free chlorine near zero as a genuine sanitation issue, \
+but frame it as "bring this up soon", not an emergency.
+- Keep safety notes proportionate: never mix pool chemicals, and add chemicals \
+to water (not water to chemicals). Suggest keeping people out of the water only \
+when it is genuinely unsafe, not as routine caution.
 - Produce one recommendation per relevant parameter, ordered most urgent first, \
-plus a one- or two-sentence overall summary. Be concise and practical. Do not \
+plus a single-sentence overall summary. Be brief: keep each message to one short, \
+plain sentence and each next step to one line. Do not pad with caveats. Do not \
 invent readings that were not provided; if a key parameter is missing, you may \
 note that it should be tested.
 - Also produce a short, ordered "next steps" to-do list: the concrete actions \
@@ -107,7 +113,9 @@ Call out any plausible weather-driven trend you can see across the history."""
 class AdviceRecommendation(BaseModel):
     parameter: str = Field(description="The water parameter, e.g. 'pH' or 'Free chlorine'.")
     severity: str = Field(description="One of: ok, low, warning, critical.")
-    message: str = Field(description="Plain-language explanation of the reading and why it matters.")
+    message: str = Field(
+        description="One short, plain sentence on the reading and why it matters. Calm, not alarmist."
+    )
     action: Optional[str] = Field(
         default=None,
         description="Concrete corrective action with a dosing estimate, or null if none needed.",
@@ -115,7 +123,9 @@ class AdviceRecommendation(BaseModel):
 
 
 class AdviceResult(BaseModel):
-    summary: str = Field(description="A one or two sentence overall assessment of the water.")
+    summary: str = Field(
+        description="A single-sentence overall assessment of the water, in a calm, reassuring tone."
+    )
     recommendations: list[AdviceRecommendation]
     next_steps: list[str] = Field(
         default_factory=list,

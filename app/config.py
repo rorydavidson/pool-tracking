@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Claude (Anthropic) — used to generate water-chemistry advice on the fly.
     # If unset, the app falls back to a basic deterministic range check.
     anthropic_api_key: str = ""
-    advice_model: str = "claude-opus-4-8"
+    advice_model: str = "claude-sonnet-5"
     advice_effort: str = "medium"  # low | medium | high | max
 
     # Automatic device syncing. The scheduler pulls readings from devices that
