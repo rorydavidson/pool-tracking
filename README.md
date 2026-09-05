@@ -88,6 +88,7 @@ All configuration is via environment variables (see `.env.example`):
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS` | SMTP delivery, used when `RESEND_API_KEY` is empty. |
 | `EMAIL_FROM` | From address for login emails. Must be on a domain you've verified with your provider. |
 | `MAGIC_LINK_TTL_MINUTES` / `SESSION_TTL_DAYS` | Login link and session lifetimes. |
+| `ALLOWED_EMAILS` | Comma-separated addresses allowed to sign in. Empty = open signup. **Set this on any public deployment.** Existing accounts not on the list are locked out too. |
 | `DATA_DIR` | Where the SQLite DB, uploaded photos and dev outbox live (default `/data`, a Docker volume). |
 
 Email provider is chosen automatically: **Resend** if `RESEND_API_KEY` is set,
