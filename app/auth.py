@@ -1,6 +1,7 @@
 """Passwordless (magic-link) email authentication."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, Request
@@ -14,6 +15,7 @@ from .models import MagicToken, User
 from .security import generate_token, hash_token
 
 SESSION_USER_KEY = "user_id"
+logger = logging.getLogger("pool_tracking.auth")
 
 
 def _utcnow() -> datetime:
@@ -31,12 +33,17 @@ def get_or_create_user(db: Session, email: str) -> User:
     return user
 
 
-def issue_magic_link(db: Session, email: str) -> str:
+def issue_magic_link(db: Session, email: str) -> str | None:
     """Create a single-use login token for ``email`` and email the link.
 
-    Returns the absolute login URL (also handy for tests / console mode).
+    Returns the absolute login URL (also handy for tests / console mode), or
+    None when the address is not on the ALLOWED_EMAILS list. In that case no
+    user row is created and nothing is sent.
     """
     settings = get_settings()
+    if not settings.is_email_allowed(email):
+        logger.info("Login requested for address not in ALLOWED_EMAILS; ignoring")
+        return None
     user = get_or_create_user(db, email)
 
     token = generate_token()
@@ -86,4 +93,10 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User | None
     user_id = request.session.get(SESSION_USER_KEY)
     if not user_id:
         return None
-    return db.get(User, user_id)
+    user = db.get(User, user_id)
+    # Accounts created before the allowlist was set (or later removed from it)
+    # lose access immediately rather than when their session cookie expires.
+    if user is not None and not get_settings().is_email_allowed(user.email):
+        request.session.pop(SESSION_USER_KEY, None)
+        return None
+    return user

@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     magic_link_ttl_minutes: int = 15
     session_ttl_days: int = 30
 
+    # Comma-separated list of email addresses allowed to sign in. Empty means
+    # anyone can request a login link (and an account is created for them).
+    allowed_emails: str = ""
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "pool_tracking.sqlite3"
@@ -80,6 +84,17 @@ class Settings(BaseSettings):
     @property
     def mqtt_enabled(self) -> bool:
         return bool(self.mqtt_host) and self.mqtt_publish_interval_minutes > 0
+
+    @property
+    def allowed_email_set(self) -> frozenset[str]:
+        return frozenset(
+            e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()
+        )
+
+    def is_email_allowed(self, email: str) -> bool:
+        """True if ``email`` may sign in. An empty allowlist permits everyone."""
+        allowed = self.allowed_email_set
+        return not allowed or email.strip().lower() in allowed
 
     @property
     def email_enabled(self) -> bool:

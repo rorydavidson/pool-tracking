@@ -52,6 +52,8 @@ def request_link(request: Request, email: str = Form(...), db: Session = Depends
             status_code=502,
         )
     # In console mode (no provider), surface the link so the app is usable without mail.
+    # link is None for addresses outside ALLOWED_EMAILS; we still show the same page
+    # so the form can't be used to probe which addresses are accepted.
     dev_link = None if settings.email_enabled else link
     return templates.TemplateResponse(
         request,
