@@ -56,3 +56,20 @@ def test_valid_replacement_removes_old_file(logged_in_client):
     assert second != first
     assert _exists(second) and not _exists(first)
 
+
+def test_deleting_pool_removes_its_files(logged_in_client):
+    pool_id = _create_pool(logged_in_client, "Doomed Pool")
+    _edit_photo(logged_in_client, pool_id, "cover.png", "image/png")
+    cover = _image_path(pool_id)
+
+    strip = "strip-photo-for-delete-test.png"
+    (get_settings().uploads_dir / strip).write_bytes(_PNG)
+    with SessionLocal() as db:
+        db.add(Reading(pool_id=pool_id, ph=7.4, image_path=strip))
+        db.commit()
+
+    logged_in_client.post(f"/pools/{pool_id}/delete", follow_redirects=False)
+    with SessionLocal() as db:
+        assert db.get(Pool, pool_id) is None
+    assert not _exists(cover)
+    assert not _exists(strip)

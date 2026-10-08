@@ -1227,6 +1227,10 @@ def delete_pool(
         return RedirectResponse("/login", status_code=303)
     pool = _get_owned_pool(db, user.id, pool_id)
     if pool is not None:
+        # The DB cascade removes the rows but not the photos on disk.
+        files = [pool.image_path, *(r.image_path for r in pool.readings)]
         db.delete(pool)
         db.commit()
+        for filename in files:
+            _delete_upload(filename)
     return RedirectResponse("/", status_code=303)
