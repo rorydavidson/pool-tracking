@@ -465,6 +465,17 @@ th { color: var(--muted); font-weight: 600; }
 }
 
 /* --- Analysis charts --- */
+.range-picker {
+  display: inline-flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 1rem;
+  padding: 0.25rem; border-radius: 10px; background: var(--card);
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.range-picker a {
+  padding: 0.35rem 0.8rem; border-radius: 7px; font-size: 0.85rem; font-weight: 600;
+  color: inherit; text-decoration: none;
+}
+.range-picker a:hover { background: var(--accent-soft); }
+.range-picker a.active { background: var(--accent); color: #fff; }
 .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
 .chart-card { margin-bottom: 0; padding: 1rem 1.1rem; }
 .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
