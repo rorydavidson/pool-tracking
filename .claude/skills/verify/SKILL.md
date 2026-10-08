@@ -10,12 +10,14 @@ description: Build, run, and drive this app to verify a change end-to-end (FastA
 ```bash
 pip install -r requirements.txt
 DATA_DIR=$(mktemp -d) APP_SECRET=verify-secret BASE_URL=http://127.0.0.1:8000 \
-  SMTP_HOST= ANTHROPIC_API_KEY= \
+  DEV_MODE=true SMTP_HOST= RESEND_API_KEY= ANTHROPIC_API_KEY= \
   uvicorn app.main:app --port 8000
 ```
 
-- `SMTP_HOST=` (empty) puts email in console mode: the magic login link is
-  printed **in the login_sent page body**, so curl can log in without a mailbox.
+- `DEV_MODE=true` with no email provider puts email in console mode: the magic
+  login link is printed **in the login_sent page body**, so curl can log in
+  without a mailbox. Without `DEV_MODE`, login returns 503 and a short
+  `APP_SECRET` stops the app starting.
 - `ANTHROPIC_API_KEY=` (empty) uses the fallback (non-Claude) advice path.
 
 ## Log in with curl
