@@ -41,6 +41,9 @@
 
     <label class="checkbox"><input type="checkbox" name="indoor" value="true" {{ 'checked' if pool.indoor }}> Indoor pool</label>
 
+    <label class="checkbox"><input type="checkbox" name="winter_mode" value="true" {{ 'checked' if pool.winter_mode }}> Winter / closed mode</label>
+    <p class="muted small">For a covered or closed pool. Connected devices sync at most twice a day.</p>
+
     <label for="pool_type">Pool type</label>
     <select id="pool_type" name="pool_type">
       <option value="">—</option>

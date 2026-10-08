@@ -11,6 +11,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..integrations import ProviderError, get_client
 from ..models import Pool, Provider, ProviderCredential
+from ..scheduler import WINTER_SYNC_INTERVAL_HOURS, effective_sync_interval
 from ..security import encrypt_json
 from ..sync_service import sync_credential
 from ..templating import templates
@@ -42,6 +43,7 @@ def integrations_page(
             "creds": creds,
             "pools": pools,
             "auto_sync_hours": settings.auto_sync_interval_hours,
+            "winter_sync_hours": WINTER_SYNC_INTERVAL_HOURS,
             "flash": request.query_params.get("flash"),
             "error": request.query_params.get("error"),
         },
@@ -190,8 +192,11 @@ def set_autosync(
     cred.auto_sync_interval_hours = interval
     db.commit()
     if enabled:
-        effective = interval or get_settings().auto_sync_interval_hours
-        msg = f"Auto-sync on for {prov.value} into {target.name} every {effective:g}h"
+        effective = effective_sync_interval(
+            cred, target, get_settings().auto_sync_interval_hours
+        )
+        winter = " (winter mode)" if target.winter_mode else ""
+        msg = f"Auto-sync on for {prov.value} into {target.name} every {effective:g}h{winter}"
     else:
         msg = f"Auto-sync off for {prov.value}"
     return RedirectResponse(f"/integrations?flash={msg}", status_code=303)
