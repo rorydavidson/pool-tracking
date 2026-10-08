@@ -90,6 +90,6 @@ def verify(request: Request, token: str, db: Session = Depends(get_db)):
 
 
 @router.get("/logout")
-def logout(request: Request):
-    auth.logout_session(request)
+def logout(request: Request, db: Session = Depends(get_db)):
+    auth.logout_session(request, db)
     return RedirectResponse("/login", status_code=303)

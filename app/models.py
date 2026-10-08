@@ -105,6 +105,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Copied into the session cookie at login. Bumping it (on logout) makes
+    # every existing cookie for this user stop working, on every device.
+    session_version: Mapped[int] = mapped_column(Integer, default=0)
 
     pools: Mapped[list["Pool"]] = relationship(
         back_populates="owner", cascade="all, delete-orphan"

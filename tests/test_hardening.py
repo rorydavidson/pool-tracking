@@ -41,3 +41,19 @@ def test_weak_secret_tolerated_in_dev_mode():
 def test_session_cookie_secure_follows_base_url():
     assert Settings(base_url="https://pool.example.com").session_cookie_secure
     assert not Settings(base_url="http://localhost:8000").session_cookie_secure
+
+
+def test_logout_revokes_copied_session_cookie(logged_in_client):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    stolen = TestClient(app)
+    stolen.cookies.update(logged_in_client.cookies)
+    assert stolen.get("/", follow_redirects=False).status_code == 200
+
+    logged_in_client.get("/logout", follow_redirects=False)
+
+    resp = stolen.get("/", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/login"

@@ -50,6 +50,9 @@ _LIGHTWEIGHT_MIGRATIONS = {
         "timezone": "VARCHAR(64)",
         "image_path": "VARCHAR(255)",
     },
+    "users": {
+        "session_version": "INTEGER DEFAULT 0",
+    },
     "readings": {
         "ec": "FLOAT",
         "image_path": "VARCHAR(255)",
