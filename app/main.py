@@ -29,7 +29,7 @@ app.add_middleware(
     secret_key=settings.app_secret,
     max_age=settings.session_ttl_days * 24 * 3600,
     same_site="lax",
-    https_only=False,  # set True behind HTTPS in production
+    https_only=settings.session_cookie_secure,
 )
 
 _static_dir = Path(__file__).parent / "static"

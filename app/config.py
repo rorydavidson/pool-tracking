@@ -103,6 +103,12 @@ class Settings(BaseSettings):
         return not allowed or email.strip().lower() in allowed
 
     @property
+    def session_cookie_secure(self) -> bool:
+        """Mark the session cookie Secure whenever the public URL is HTTPS, so
+        it is never sent over plain HTTP (TLS terminates at a reverse proxy)."""
+        return urlsplit(self.base_url).scheme == "https"
+
+    @property
     def base_url_is_local(self) -> bool:
         return urlsplit(self.base_url).hostname in _LOCAL_HOSTS
 

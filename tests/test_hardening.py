@@ -36,3 +36,8 @@ def test_strong_secret_accepted():
 def test_weak_secret_tolerated_in_dev_mode():
     s = Settings(app_secret="dev-insecure-secret-change-me", dev_mode=True)
     assert s.startup_problems() == []
+
+
+def test_session_cookie_secure_follows_base_url():
+    assert Settings(base_url="https://pool.example.com").session_cookie_secure
+    assert not Settings(base_url="http://localhost:8000").session_cookie_secure
