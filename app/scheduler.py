@@ -34,15 +34,29 @@ _STARTUP_DELAY_SECONDS = 45  # let the app settle before the first pass
 # Local times of day at which each pool's advice is automatically regenerated.
 _ADVICE_HOURS = (7, 19)
 
+# Minimum device sync interval for a pool in winter / closed mode (twice a day).
+WINTER_SYNC_INTERVAL_HOURS = 12.0
+
 _task: asyncio.Task | None = None
 
 
-def _due_credential_ids(default_interval_hours: float) -> list[int]:
-    """Return ids of enabled credentials due for a sync (own short-lived session).
+def effective_sync_interval(
+    cred: ProviderCredential, pool: Pool | None, default_interval_hours: float
+) -> float:
+    """Hours between auto-syncs for ``cred`` into ``pool``.
 
-    Each device's cadence is its own ``auto_sync_interval_hours`` when set,
-    otherwise the global default.
+    The device's own interval when set, otherwise the global default. A pool in
+    winter mode stretches this to at least twice a day; a longer interval the
+    owner chose is kept.
     """
+    interval = cred.auto_sync_interval_hours or default_interval_hours
+    if pool is not None and pool.winter_mode and interval > 0:
+        interval = max(interval, WINTER_SYNC_INTERVAL_HOURS)
+    return interval
+
+
+def _due_credential_ids(default_interval_hours: float) -> list[int]:
+    """Return ids of enabled credentials due for a sync (own short-lived session)."""
     now = datetime.now(timezone.utc)
     db = SessionLocal()
     try:
@@ -54,7 +68,9 @@ def _due_credential_ids(default_interval_hours: float) -> list[int]:
         ).all()
         due = []
         for cred in rows:
-            interval = cred.auto_sync_interval_hours or default_interval_hours
+            interval = effective_sync_interval(
+                cred, cred.auto_sync_pool, default_interval_hours
+            )
             if interval <= 0:
                 continue
             cutoff = now - timedelta(hours=interval)

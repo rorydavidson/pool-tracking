@@ -1045,6 +1045,7 @@ async def update_pool(
     sanitizer: str = Form("chlorine"),
     surface: str = Form("plaster"),
     indoor: bool = Form(False),
+    winter_mode: bool = Form(False),
     pool_type: str = Form(""),
     shape: str = Form(""),
     length_m: str = Form(""),
@@ -1069,6 +1070,7 @@ async def update_pool(
     pool.sanitizer = SanitizerType(sanitizer)
     pool.surface = SurfaceType(surface)
     pool.indoor = indoor
+    pool.winter_mode = winter_mode
     pool.pool_type = _enum_or_none(PoolType, pool_type)
     pool.shape = _enum_or_none(PoolShape, shape)
     pool.length_m = _parse_float(length_m)

@@ -19,7 +19,7 @@
           <p class="muted">
             {{ "%.0f"|format(pool.volume_litres) }} L ·
             {{ pool.sanitizer.value }} ·
-            {{ "indoor" if pool.indoor else "outdoor" }}
+            {{ "indoor" if pool.indoor else "outdoor" }}{% if pool.winter_mode %} · ❄ winter mode{% endif %}
           </p>
           <p class="muted small">{{ pool.readings|length }} reading(s)</p>
         </div>

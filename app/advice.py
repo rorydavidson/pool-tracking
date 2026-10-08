@@ -35,7 +35,9 @@ Principles:
 fine-tuning pH; interpret Free Chlorine against Cyanuric Acid (stabiliser); \
 treat ORP as a sanitiser-strength cross-check; account for the sanitiser type \
 (chlorine, saltwater chlorinator, or bromine), surface material, and whether \
-the pool is indoor or outdoor.
+the pool is indoor or outdoor. When "winter_mode" is true the pool is closed \
+or covered for the season: aim to keep it protected rather than swim-ready \
+(algae prevention, stable pH and alkalinity) and don't push for frequent testing.
 - When a parameter needs adjustment, give a concrete dosing estimate computed \
 for THIS pool's volume and a named product (e.g. calcium hypochlorite, liquid \
 chlorine, sodium bicarbonate, soda ash, muriatic acid, cyanuric acid, calcium \
@@ -263,6 +265,7 @@ def _build_pool_payload(
             "sanitiser": pool.sanitizer.value,
             "surface": pool.surface.value,
             "setting": "indoor" if pool.indoor else "outdoor",
+            "winter_mode": bool(pool.winter_mode),
             "location": pool.location_name,
         },
         "owner_notes": notes or None,
