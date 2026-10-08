@@ -515,6 +515,15 @@ def _save_upload(upload: UploadFile, raw: bytes) -> str:
     return filename
 
 
+def _delete_upload(filename: str | None) -> None:
+    """Remove a stored upload from disk, if it exists."""
+    if not filename:
+        return
+    path = _safe_upload_path(filename)
+    if path is not None:
+        path.unlink(missing_ok=True)
+
+
 def _safe_upload_path(filename: str):
     """Resolve a stored upload filename to a path, rejecting traversal."""
     settings = get_settings()
@@ -665,10 +674,7 @@ def delete_reading(
         return RedirectResponse(f"/pools/{pool.id}", status_code=303)
 
     # Remove the attached strip photo from disk, if any.
-    if reading.image_path:
-        path = _safe_upload_path(reading.image_path)
-        if path is not None:
-            path.unlink(missing_ok=True)
+    _delete_upload(reading.image_path)
 
     db.delete(reading)
     db.flush()
@@ -1108,20 +1114,19 @@ def _apply_pool_photo(pool: Pool, photo: UploadFile | None, remove: bool) -> str
     has_upload = bool(photo and photo.filename)
 
     old = pool.image_path
-    if remove or has_upload:
-        if old:
-            old_path = _safe_upload_path(old)
-            if old_path is not None:
-                old_path.unlink(missing_ok=True)
-            pool.image_path = None
-
     if has_upload:
+        # Validate and store the new photo before touching the old one, so a
+        # rejected upload leaves the current photo in place.
         if media_type not in SUPPORTED_IMAGE_TYPES:
             return "Pool photo must be a JPEG, PNG, WebP or HEIC image."
         raw = photo.file.read()
         if len(raw) > MAX_IMAGE_BYTES:
             return "Pool photo is too large (max 8 MB)."
         pool.image_path = _save_upload(photo, raw)
+        _delete_upload(old)
+    elif remove:
+        pool.image_path = None
+        _delete_upload(old)
     return None
 
 
