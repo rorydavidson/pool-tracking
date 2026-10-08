@@ -159,10 +159,14 @@ def fallback_assessment(
             "AI advice is unavailable (no ANTHROPIC_API_KEY configured). Set an API "
             "key for tailored, dosed recommendations."
         )
-    a = Assessment(
-        source="fallback",
-        summary=f"{reason} For now, here is a basic in-range / out-of-range check.",
-    )
+    summary = f"{reason} For now, here is a basic in-range / out-of-range check."
+    if pool.winter_mode:
+        summary += (
+            " The pool is in winter mode: these are swim-season targets, so small"
+            " deviations matter less while it is closed. Focus on pH, alkalinity"
+            " and enough chlorine to prevent algae."
+        )
+    a = Assessment(source="fallback", summary=summary)
     if not readings:
         return a
 

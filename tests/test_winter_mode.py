@@ -58,7 +58,8 @@ def test_toggle_winter_mode_via_edit(logged_in_client):
 
     _edit(logged_in_client, pool_id, winter_mode="true")
     page = logged_in_client.get(f"/pools/{pool_id}")
-    assert "winter mode" in page.text
+    assert "hero no-photo winter" in page.text
+    assert "Winter mode · pool closed" in page.text
     with SessionLocal() as db:
         assert db.get(Pool, pool_id).winter_mode is True
 
@@ -104,3 +105,26 @@ def test_scheduler_skips_winter_pool_synced_recently(logged_in_client):
             for cid in (summer_cred, winter_cred):
                 db.delete(db.get(ProviderCredential, cid))
             db.commit()
+
+
+def test_fallback_advice_mentions_winter_mode():
+    from app.chemistry import fallback_assessment
+    from app.models import Reading
+
+    reading = Reading(taken_at=datetime.now(timezone.utc), ph=7.4)
+    assert "winter mode" not in fallback_assessment(Pool(winter_mode=False), [reading]).summary
+    assert "winter mode" in fallback_assessment(Pool(winter_mode=True), [reading]).summary
+
+
+def test_toggling_winter_mode_regenerates_advice(logged_in_client):
+    pool_id = _create_pool(logged_in_client, "Advice Pool")
+    logged_in_client.post(f"/pools/{pool_id}/readings/new", data={"ph": "7.4"})
+    assert "Advice is tailored for a closed pool" not in logged_in_client.get(
+        f"/pools/{pool_id}"
+    ).text
+
+    _edit(logged_in_client, pool_id, winter_mode="true")
+    page = logged_in_client.get(f"/pools/{pool_id}").text
+    assert "Advice is tailored for a closed pool" in page
+    # The stored advice itself was rewritten for the new mode.
+    assert "The pool is in winter mode" in page

@@ -35,9 +35,21 @@ Principles:
 fine-tuning pH; interpret Free Chlorine against Cyanuric Acid (stabiliser); \
 treat ORP as a sanitiser-strength cross-check; account for the sanitiser type \
 (chlorine, saltwater chlorinator, or bromine), surface material, and whether \
-the pool is indoor or outdoor. When "winter_mode" is true the pool is closed \
-or covered for the season: aim to keep it protected rather than swim-ready \
-(algae prevention, stable pH and alkalinity) and don't push for frequent testing.
+the pool is indoor or outdoor.
+- Winter / closed mode: when the pool's "winter_mode" is true, the pool is \
+closed or covered for the off-season and nobody is swimming. Frame the whole \
+assessment, summary and next steps around keeping the water, surface and \
+equipment protected until it reopens, not around making it swim-ready, and say \
+in the summary that the advice is for a closed pool. Priorities: keep pH \
+(7.2-7.6) and Total Alkalinity in range so the water is neither corrosive nor \
+scale-forming; keep a modest Free Chlorine residual (low end of the target, \
+allowing for CYA) to prevent algae rather than swim-season levels. Cold water \
+slows chlorine loss and chemical reactions, so dose conservatively and allow \
+longer before re-testing (weekly to fortnightly is fine). Readings that would \
+only affect swimmer comfort should be "low", not "warning". Next steps must suit \
+a closed pool (e.g. check the cover, spread doses out if the pump is off) and \
+never suggest swimming-related actions. If the weather shows freezing \
+temperatures, mention protecting pipes and equipment once.
 - When a parameter needs adjustment, give a concrete dosing estimate computed \
 for THIS pool's volume and a named product (e.g. calcium hypochlorite, liquid \
 chlorine, sodium bicarbonate, soda ash, muriatic acid, cyanuric acid, calcium \
