@@ -8,7 +8,8 @@ import tempfile
 _TMP = tempfile.mkdtemp(prefix="pool-tracking-test-")
 os.environ["DATA_DIR"] = _TMP
 os.environ["APP_SECRET"] = "test-secret-not-for-production"
-os.environ["BASE_URL"] = "http://testserver"
+os.environ["BASE_URL"] = "http://localhost"
+os.environ["DEV_MODE"] = "true"  # shows the magic link in console mode
 os.environ.setdefault("SMTP_HOST", "")  # console email mode
 os.environ.setdefault("ANTHROPIC_API_KEY", "")  # fallback advice (no network)
 

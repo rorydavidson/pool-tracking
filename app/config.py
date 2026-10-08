@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +15,11 @@ class Settings(BaseSettings):
     app_secret: str = "dev-insecure-secret-change-me"
     base_url: str = "http://localhost:8000"
     data_dir: Path = Path("./data")
+    # Local development only. Shows the magic link on the "check your email"
+    # page when no email provider is configured. Only allowed when BASE_URL is
+    # localhost, because anyone who can reach the login form could otherwise
+    # sign in as any user.
+    dev_mode: bool = False
 
     # Claude (Anthropic) — used to generate water-chemistry advice on the fly.
     # If unset, the app falls back to a basic deterministic range check.
@@ -97,6 +103,17 @@ class Settings(BaseSettings):
         return not allowed or email.strip().lower() in allowed
 
     @property
+    def base_url_is_local(self) -> bool:
+        return urlsplit(self.base_url).hostname in _LOCAL_HOSTS
+
+    def startup_problems(self) -> list[str]:
+        """Configuration that makes the app unsafe to run, as messages."""
+        problems = []
+        if self.dev_mode and not self.base_url_is_local:
+            problems.append("DEV_MODE is only allowed when BASE_URL is localhost.")
+        return problems
+
+    @property
     def email_enabled(self) -> bool:
         """True when a real email provider (Resend or SMTP) is configured."""
         return self.email_provider != "console"
@@ -105,6 +122,9 @@ class Settings(BaseSettings):
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
         self.uploads_dir.mkdir(parents=True, exist_ok=True)
+
+
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 @lru_cache

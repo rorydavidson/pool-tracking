@@ -17,6 +17,9 @@ from .routes import auth_routes, integrations, pools
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 settings = get_settings()
+_problems = settings.startup_problems()
+if _problems:
+    raise RuntimeError("Refusing to start: " + " ".join(_problems))
 
 app = FastAPI(title="Pool Tracking", version=__version__)
 
