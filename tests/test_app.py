@@ -339,3 +339,62 @@ def test_stylesheet_url_is_versioned(client):
 
     page = client.get("/login").text
     assert re.search(r'/static/style\.css\?v=[0-9a-f]{10}"', page)
+
+
+def test_analysis_range_filters_charts_not_history(logged_in_client):
+    from datetime import datetime, timedelta, timezone
+
+    from app.database import SessionLocal
+    from app.models import Reading
+
+    resp = logged_in_client.post(
+        "/pools/new",
+        data={"name": "Range Pool", "volume": "30000", "volume_unit": "litres"},
+        follow_redirects=False,
+    )
+    pool_url = resp.headers["location"]
+    pool_id = int(pool_url.rstrip("/").split("/")[-1])
+    now = datetime.now(timezone.utc)
+    with SessionLocal() as db:
+        db.add_all([
+            Reading(pool_id=pool_id, taken_at=now - timedelta(days=2), ph=7.4),
+            Reading(pool_id=pool_id, taken_at=now - timedelta(days=60), ph=7.8),
+        ])
+        db.commit()
+
+    week = logged_in_client.get(f"{pool_url}/analysis?range=1w").text
+    assert "1 of 2 reading(s) from the last 1 week" in week
+    assert "1 point(s)" in week
+    assert 'href="?range=1w" class="active"' in week
+    # The history table still lists both readings.
+    assert "2 reading(s) over" in week
+
+    assert "2 point(s)" in logged_in_client.get(f"{pool_url}/analysis?range=3m").text
+    # Unknown values fall back to the whole history.
+    assert 'href="?range=all" class="active"' in logged_in_client.get(
+        f"{pool_url}/analysis?range=bogus"
+    ).text
+
+
+def test_analysis_range_with_no_recent_readings(logged_in_client):
+    from datetime import datetime, timedelta, timezone
+
+    from app.database import SessionLocal
+    from app.models import Reading
+
+    resp = logged_in_client.post(
+        "/pools/new",
+        data={"name": "Old Pool", "volume": "30000", "volume_unit": "litres"},
+        follow_redirects=False,
+    )
+    pool_url = resp.headers["location"]
+    pool_id = int(pool_url.rstrip("/").split("/")[-1])
+    with SessionLocal() as db:
+        db.add(Reading(
+            pool_id=pool_id, taken_at=datetime.now(timezone.utc) - timedelta(days=90), ph=7.4
+        ))
+        db.commit()
+
+    page = logged_in_client.get(f"{pool_url}/analysis?range=1m").text
+    assert "No readings in the last 1 month" in page
+    assert "1 reading(s) over" in page  # history still shown

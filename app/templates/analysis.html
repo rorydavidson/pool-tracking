@@ -4,17 +4,32 @@
 <div class="page-head">
   <div>
     <h1>{{ pool.name }} · Analysis</h1>
-    <p class="muted small">Trends across {{ reading_count }} reading(s). Shaded band = target range.</p>
+    <p class="muted small">
+      {% if period == "all" %}Trends across {{ reading_count }} reading(s).
+      {% else %}Trends across {{ charted_count }} of {{ reading_count }} reading(s) from the last {{ ranges[period][0] }}.{% endif %}
+      Shaded band = target range.</p>
   </div>
   <a class="secondary" href="/pools/{{ pool.id }}">← Back to pool</a>
 </div>
 
-{% if not charts %}
+{% if not reading_count %}
   <div class="card empty">
     <p>Not enough data to chart yet.</p>
     <a class="primary" href="/pools/{{ pool.id }}/readings/new">Add a reading</a>
   </div>
 {% else %}
+  <nav class="range-picker" aria-label="Chart period">
+    {% for key, (label, _days) in ranges.items() %}
+      <a href="?range={{ key }}" {% if key == period %}class="active" aria-current="true"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  {% if not charts %}
+    <div class="card empty">
+      <p>No readings in the last {{ ranges[period][0] }}.</p>
+      <a class="secondary" href="?range=all">Show all</a>
+    </div>
+  {% endif %}
   <div class="chart-grid">
     {% for c in charts %}
       {% set state = ('out' if (c.latest < c.target[0] or c.latest > c.target[1]) else 'in') if c.target else 'neutral' %}

@@ -3,7 +3,8 @@
 Everything is rendered server-side as inline SVG — no JavaScript, no external
 libraries — so it works offline and keeps the app's privacy-first, server-
 rendered design. Each chart plots one parameter over time with an optional
-shaded target band.
+shaded target band. The x axis is real time, so gaps between tests show as
+gaps rather than being squeezed out.
 """
 from __future__ import annotations
 
@@ -36,11 +37,21 @@ def line_chart(
     *,
     target: tuple[float, float] | None = None,
     unit: str = "",
+    start: dt.datetime | None = None,
+    end: dt.datetime | None = None,
 ) -> str:
-    """Return an inline SVG line chart for a chronological list of points."""
+    """Return an inline SVG line chart for a chronological list of points.
+
+    ``start`` and ``end`` set the time span of the x axis; they default to the
+    first and last point. Passing the same span to several charts lines their
+    axes up so they can be compared by eye.
+    """
     pts = [p for p in points if p.value is not None]
     if not pts:
         return '<p class="muted small">No data yet.</p>'
+    start = start or pts[0].when
+    end = end or pts[-1].when
+    seconds = (end - start).total_seconds()
 
     values = [p.value for p in pts]
     lo_v, hi_v = min(values), max(values)
@@ -58,10 +69,11 @@ def line_chart(
 
     n = len(pts)
 
-    def x_at(i: int) -> float:
-        if n == 1:
+    def x_at(when: dt.datetime) -> float:
+        if seconds <= 0:  # a single instant: centre it
             return _PAD_L + _PLOT_W / 2
-        return _PAD_L + _PLOT_W * i / (n - 1)
+        frac = (when - start).total_seconds() / seconds
+        return _PAD_L + _PLOT_W * min(1.0, max(0.0, frac))
 
     def y_at(v: float) -> float:
         return _PAD_T + _PLOT_H * (1 - (v - lo_v) / span)
@@ -86,7 +98,7 @@ def line_chart(
     )
 
     # Area fill under the line.
-    coords = [(x_at(i), y_at(p.value)) for i, p in enumerate(pts)]
+    coords = [(x_at(p.when), y_at(p.value)) for p in pts]
     if n > 1:
         area = (
             f'M{coords[0][0]:.1f},{_PAD_T + _PLOT_H:.1f} '
@@ -117,15 +129,19 @@ def line_chart(
         f'<text class="chart-yl" x="{_PAD_L:g}" y="{_PAD_T + _PLOT_H - 1:.0f}">{_fmt(lo_v)}</text>'
     )
 
-    # X date labels (first and last).
-    parts.append(
-        f'<text class="chart-xl" x="{_PAD_L:g}" y="{_H - 6:.0f}" '
-        f'text-anchor="start">{pts[0].when.strftime("%d %b")}</text>'
-    )
-    if n > 1:
+    # X date labels at the start, middle and end of the time span.
+    if seconds <= 0:
+        ticks = [(start, _PAD_L + _PLOT_W / 2, "middle")]
+    else:
+        ticks = [
+            (start, _PAD_L, "start"),
+            (start + (end - start) / 2, _PAD_L + _PLOT_W / 2, "middle"),
+            (end, _W - _PAD_R, "end"),
+        ]
+    for when, x, anchor in ticks:
         parts.append(
-            f'<text class="chart-xl" x="{_W - _PAD_R:g}" y="{_H - 6:.0f}" '
-            f'text-anchor="end">{pts[-1].when.strftime("%d %b")}</text>'
+            f'<text class="chart-xl" x="{x:g}" y="{_H - 6:.0f}" '
+            f'text-anchor="{anchor}">{when.strftime("%d %b")}</text>'
         )
 
     parts.append("</svg>")

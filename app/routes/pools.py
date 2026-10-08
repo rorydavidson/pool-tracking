@@ -8,7 +8,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -337,10 +337,22 @@ def _target_for(attr: str, pool: Pool, latest_cya: float | None):
     return None
 
 
+# Chart periods on the analysis page: query value -> (button label, days back).
+# None means the whole history.
+ANALYSIS_RANGES = {
+    "1w": ("1 week", 7),
+    "1m": ("1 month", 30),
+    "3m": ("3 months", 91),
+    "6m": ("6 months", 182),
+    "all": ("All", None),
+}
+
+
 @router.get("/pools/{pool_id}/analysis", response_class=HTMLResponse)
 def pool_analysis(
     request: Request,
     pool_id: int,
+    period: str = Query("all", alias="range"),
     user=Depends(auth.current_user),
     db: Session = Depends(get_db),
 ):
@@ -358,6 +370,16 @@ def pool_analysis(
         (r.cyanuric_acid for r in reversed(readings) if r.cyanuric_acid is not None), None
     )
 
+    # The period filters the charts only; targets above and the history table
+    # below still use the full history.
+    if period not in ANALYSIS_RANGES:
+        period = "all"
+    days = ANALYSIS_RANGES[period][1]
+    charted = readings
+    if days is not None:
+        cutoff = _norm_dt(datetime.now(timezone.utc) - timedelta(days=days))
+        charted = [r for r in readings if _norm_dt(r.taken_at) >= cutoff]
+
     def _local(value: datetime) -> datetime:
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
@@ -368,11 +390,19 @@ def pool_analysis(
                 pass
         return value
 
+    # Every chart shares one time axis: the chosen period up to now, or for
+    # "all" from the first reading up to now.
+    axis_end = _local(datetime.now(timezone.utc))
+    if days is not None:
+        axis_start = axis_end - timedelta(days=days)
+    else:
+        axis_start = _local(readings[0].taken_at) if readings else axis_end
+
     charts = []
     for attr, label, unit in READING_CHART_FIELDS:
         series = [
             Point(_local(r.taken_at), getattr(r, attr))
-            for r in readings if getattr(r, attr) is not None
+            for r in charted if getattr(r, attr) is not None
         ]
         if not series:
             continue
@@ -384,7 +414,9 @@ def pool_analysis(
                 "latest": series[-1].value,
                 "count": len(series),
                 "target": target,
-                "svg": line_chart(series, target=target, unit=unit),
+                "svg": line_chart(
+                    series, target=target, unit=unit, start=axis_start, end=axis_end
+                ),
             }
         )
 
@@ -401,6 +433,9 @@ def pool_analysis(
             "pool": pool,
             "charts": charts,
             "reading_count": len(readings),
+            "charted_count": len(charted),
+            "ranges": ANALYSIS_RANGES,
+            "period": period,
             "weeks": weeks,
             "weather": weather_by_date,
         },
