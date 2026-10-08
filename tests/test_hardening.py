@@ -16,3 +16,23 @@ def test_dev_mode_requires_localhost_base_url():
     assert any("DEV_MODE" in p for p in remote.startup_problems())
     local = Settings(dev_mode=True, base_url="http://127.0.0.1:8000")
     assert not any("DEV_MODE" in p for p in local.startup_problems())
+
+
+_STRONG = "x" * 40
+
+
+def test_default_or_short_secret_refused_outside_dev_mode():
+    for secret in ("dev-insecure-secret-change-me", "change-me-to-a-long-random-string", "short"):
+        s = Settings(app_secret=secret, base_url="https://pool.example.com", dev_mode=False)
+        problems = s.startup_problems()
+        assert any("APP_SECRET" in p for p in problems), secret
+
+
+def test_strong_secret_accepted():
+    s = Settings(app_secret=_STRONG, base_url="https://pool.example.com", dev_mode=False)
+    assert s.startup_problems() == []
+
+
+def test_weak_secret_tolerated_in_dev_mode():
+    s = Settings(app_secret="dev-insecure-secret-change-me", dev_mode=True)
+    assert s.startup_problems() == []

@@ -111,6 +111,18 @@ class Settings(BaseSettings):
         problems = []
         if self.dev_mode and not self.base_url_is_local:
             problems.append("DEV_MODE is only allowed when BASE_URL is localhost.")
+        # APP_SECRET signs session cookies and derives the credential
+        # encryption key, so a guessable one lets anyone forge a login.
+        weak = (
+            self.app_secret in _KNOWN_DEFAULT_SECRETS
+            or len(self.app_secret) < _MIN_SECRET_LENGTH
+        )
+        if weak and not self.dev_mode:
+            problems.append(
+                f"APP_SECRET must be a random value of at least {_MIN_SECRET_LENGTH} "
+                "characters, not the default. Generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
         return problems
 
     @property
@@ -125,6 +137,12 @@ class Settings(BaseSettings):
 
 
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_MIN_SECRET_LENGTH = 32
+# Placeholders shipped in this repo; never acceptable outside dev mode.
+_KNOWN_DEFAULT_SECRETS = frozenset({
+    "dev-insecure-secret-change-me",
+    "change-me-to-a-long-random-string",
+})
 
 
 @lru_cache
