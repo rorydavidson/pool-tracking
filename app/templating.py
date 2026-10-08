@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -112,3 +113,13 @@ templates.env.globals["fmt_local"] = fmt_local
 templates.env.globals["param_icon"] = param_icon
 templates.env.globals["weather_icon"] = weather_icon
 templates.env.globals["app_name"] = "Pool Tracking"
+
+
+def _stylesheet_version() -> str:
+    """Short content hash of style.css, appended to its URL so browsers fetch
+    the new file after a deploy instead of serving a stale cached copy."""
+    css = Path(__file__).parent / "static" / "style.css"
+    return hashlib.sha256(css.read_bytes()).hexdigest()[:10]
+
+
+templates.env.globals["css_version"] = _stylesheet_version()
