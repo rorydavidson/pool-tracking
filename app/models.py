@@ -162,6 +162,9 @@ class Pool(Base):
     # Free-text context the owner can add (e.g. "recently shocked", "near oak
     # trees"). Passed to the advice generator as extra context.
     notes: Mapped[str | None] = mapped_column(Text)
+    # Winter / closed mode: the pool is covered or shut for the season, so the
+    # scheduler polls its devices no more than twice a day.
+    winter_mode: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     owner: Mapped["User"] = relationship(back_populates="pools")

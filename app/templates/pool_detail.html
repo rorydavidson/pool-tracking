@@ -59,6 +59,7 @@
       <span class="chip">{{ pool.sanitizer.value }}</span>
       <span class="chip">{{ pool.surface.value }}</span>
       <span class="chip">{{ "indoor" if pool.indoor else "outdoor" }}</span>
+      {% if pool.winter_mode %}<span class="chip">❄ winter mode</span>{% endif %}
       {% if pool.pool_type %}<span class="chip">{{ pool.pool_type.value.replace("_", "-") }}</span>{% endif %}
       {% if pool.shape %}<span class="chip">{{ pool.shape.value }}</span>{% endif %}
       {% if pool.length_m and pool.avg_depth_m %}

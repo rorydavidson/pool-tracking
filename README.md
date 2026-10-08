@@ -19,6 +19,10 @@ you can spot what is driving changes in your pool.
   and a per-device frequency) on the Devices page and a background scheduler pulls
   fresh readings on that cadence (falling back to `AUTO_SYNC_INTERVAL_HOURS`,
   default 1). Manual sync still works any time.
+- **Winter / closed mode.** Tick it on a pool's edit page when the pool is covered
+  or shut for the season. Its devices then sync at most twice a day (every 12h,
+  or longer if you chose a longer interval), and advice shifts to keeping the
+  water protected rather than swim-ready.
 - **Read a test strip from a photo.** Upload a photo of a dipped strip next to its
   colour key and Claude reads each pad and pre-fills the form for you to confirm.
   The photo is stored with the reading.

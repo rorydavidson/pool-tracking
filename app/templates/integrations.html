@@ -32,8 +32,11 @@
       </p>
       {% if cred.auto_sync_enabled and cred.auto_sync_pool %}
         {% set effective = cred.auto_sync_interval_hours or auto_sync_hours %}
+        {% set winter = cred.auto_sync_pool.winter_mode %}
+        {% if winter and effective < winter_sync_hours %}{% set effective = winter_sync_hours %}{% endif %}
         <p class="muted small">⏱ Auto-syncing every {{ "%g"|format(effective) }}h into
-          <strong>{{ cred.auto_sync_pool.name }}</strong> (manual sync still available).</p>
+          <strong>{{ cred.auto_sync_pool.name }}</strong>{% if winter %} (❄ winter mode){% endif %}
+          (manual sync still available).</p>
       {% endif %}
       {% if pools %}
         <form method="post" action="/integrations/{{ provider.value }}/sync" class="inline-form">
