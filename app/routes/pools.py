@@ -390,6 +390,14 @@ def pool_analysis(
                 pass
         return value
 
+    # Every chart shares one time axis: the chosen period up to now, or for
+    # "all" from the first reading up to now.
+    axis_end = _local(datetime.now(timezone.utc))
+    if days is not None:
+        axis_start = axis_end - timedelta(days=days)
+    else:
+        axis_start = _local(readings[0].taken_at) if readings else axis_end
+
     charts = []
     for attr, label, unit in READING_CHART_FIELDS:
         series = [
@@ -406,7 +414,9 @@ def pool_analysis(
                 "latest": series[-1].value,
                 "count": len(series),
                 "target": target,
-                "svg": line_chart(series, target=target, unit=unit),
+                "svg": line_chart(
+                    series, target=target, unit=unit, start=axis_start, end=axis_end
+                ),
             }
         )
 
