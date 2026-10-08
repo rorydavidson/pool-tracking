@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +15,11 @@ class Settings(BaseSettings):
     app_secret: str = "dev-insecure-secret-change-me"
     base_url: str = "http://localhost:8000"
     data_dir: Path = Path("./data")
+    # Local development only. Shows the magic link on the "check your email"
+    # page when no email provider is configured. Only allowed when BASE_URL is
+    # localhost, because anyone who can reach the login form could otherwise
+    # sign in as any user.
+    dev_mode: bool = False
 
     # Claude (Anthropic) — used to generate water-chemistry advice on the fly.
     # If unset, the app falls back to a basic deterministic range check.
@@ -97,6 +103,35 @@ class Settings(BaseSettings):
         return not allowed or email.strip().lower() in allowed
 
     @property
+    def session_cookie_secure(self) -> bool:
+        """Mark the session cookie Secure whenever the public URL is HTTPS, so
+        it is never sent over plain HTTP (TLS terminates at a reverse proxy)."""
+        return urlsplit(self.base_url).scheme == "https"
+
+    @property
+    def base_url_is_local(self) -> bool:
+        return urlsplit(self.base_url).hostname in _LOCAL_HOSTS
+
+    def startup_problems(self) -> list[str]:
+        """Configuration that makes the app unsafe to run, as messages."""
+        problems = []
+        if self.dev_mode and not self.base_url_is_local:
+            problems.append("DEV_MODE is only allowed when BASE_URL is localhost.")
+        # APP_SECRET signs session cookies and derives the credential
+        # encryption key, so a guessable one lets anyone forge a login.
+        weak = (
+            self.app_secret in _KNOWN_DEFAULT_SECRETS
+            or len(self.app_secret) < _MIN_SECRET_LENGTH
+        )
+        if weak and not self.dev_mode:
+            problems.append(
+                f"APP_SECRET must be a random value of at least {_MIN_SECRET_LENGTH} "
+                "characters, not the default. Generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        return problems
+
+    @property
     def email_enabled(self) -> bool:
         """True when a real email provider (Resend or SMTP) is configured."""
         return self.email_provider != "console"
@@ -105,6 +140,15 @@ class Settings(BaseSettings):
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
         self.uploads_dir.mkdir(parents=True, exist_ok=True)
+
+
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_MIN_SECRET_LENGTH = 32
+# Placeholders shipped in this repo; never acceptable outside dev mode.
+_KNOWN_DEFAULT_SECRETS = frozenset({
+    "dev-insecure-secret-change-me",
+    "change-me-to-a-long-random-string",
+})
 
 
 @lru_cache

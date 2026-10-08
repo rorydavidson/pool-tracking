@@ -1,6 +1,8 @@
 """Connect, verify, sync, and disconnect third-party device accounts."""
 from __future__ import annotations
 
+import math
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
@@ -17,6 +19,9 @@ from ..sync_service import sync_credential
 from ..templating import templates
 
 router = APIRouter()
+
+# Longest per-device auto-sync interval accepted from the form (one week).
+_MAX_INTERVAL_HOURS = 168
 
 
 def _credentials_by_provider(db: Session, user_id: int) -> dict[Provider, ProviderCredential]:
@@ -183,7 +188,9 @@ def set_autosync(
     if interval_hours.strip():
         try:
             value = float(interval_hours)
-            interval = value if value > 0 else None
+            # float() accepts "inf" and "nan", which would break the scheduler.
+            if math.isfinite(value) and 0 < value <= _MAX_INTERVAL_HOURS:
+                interval = value
         except ValueError:
             interval = None
 

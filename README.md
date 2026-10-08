@@ -59,8 +59,10 @@ you can spot what is driving changes in your pool.
 
 ```bash
 cp .env.example .env
-# Edit .env: set a strong APP_SECRET. Optionally set ANTHROPIC_API_KEY (for AI
-# advice / strip reading) and an email provider (RESEND_API_KEY or SMTP_*).
+# Edit .env: set a strong APP_SECRET (32+ characters; the app won't start with
+# the placeholder) and an email provider (RESEND_API_KEY or SMTP_*), or
+# DEV_MODE=true to try it locally without one. Optionally set ANTHROPIC_API_KEY
+# for AI advice / strip reading.
 
 docker compose up --build
 ```
@@ -71,8 +73,11 @@ Open http://localhost:8123, enter your email, and you're in.
 
 The app is fully usable out of the box:
 
-- **No email provider?** It runs in *console mode*: the login link is printed to
-  the container logs, shown on screen, and written to `/data/outbox/`.
+- **No email provider?** Set `DEV_MODE=true` (only allowed when `BASE_URL` is
+  localhost) and it runs in *console mode*: the login link is printed to the
+  container logs, shown on screen, and written to `/data/outbox/`. Outside dev
+  mode, login is refused until a provider is configured, because showing the
+  link on screen would let anyone sign in as anyone.
 - **No `ANTHROPIC_API_KEY`?** Advice falls back to a basic in-range / out-of-range
   check (no dosing), and strip-photo reading is disabled. Set a key for the full
   Claude features.
@@ -83,8 +88,9 @@ All configuration is via environment variables (see `.env.example`):
 
 | Variable | Purpose |
 |---|---|
-| `APP_SECRET` | Signs sessions & magic-link tokens, and derives the key that encrypts stored device credentials. **Set this.** |
-| `BASE_URL` | Public URL used to build login links (e.g. `https://pool.example.com`). |
+| `APP_SECRET` | Signs sessions & magic-link tokens, and derives the key that encrypts stored device credentials. **Set this** to a random value of 32+ characters; the app refuses to start with a short or placeholder secret (except in dev mode). |
+| `BASE_URL` | Public URL used to build login links (e.g. `https://pool.example.com`). When it is `https://`, the session cookie is marked Secure. |
+| `DEV_MODE` | Local development only: shows the login link on screen when no email provider is set, and tolerates a weak `APP_SECRET`. Refused unless `BASE_URL` is localhost. |
 | `ANTHROPIC_API_KEY` | Enables Claude advice and test-strip reading. Without it, a basic fallback is used. |
 | `ADVICE_MODEL` / `ADVICE_EFFORT` | Claude model (default `claude-sonnet-5`) and thinking effort (`low`/`medium`/`high`/`max`). |
 | `AUTO_SYNC_INTERVAL_HOURS` | How often the background scheduler syncs auto-enabled devices (default `1`; `0` disables it). |
@@ -96,7 +102,9 @@ All configuration is via environment variables (see `.env.example`):
 | `DATA_DIR` | Where the SQLite DB, uploaded photos and dev outbox live (default `/data`, a Docker volume). |
 
 Email provider is chosen automatically: **Resend** if `RESEND_API_KEY` is set,
-else **SMTP** if `SMTP_HOST` is set, else **console**.
+else **SMTP** if `SMTP_HOST` is set, else **console** (dev mode only).
+
+Logging out ends every session for that account, on all devices.
 
 ## How it works
 

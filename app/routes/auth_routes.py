@@ -40,6 +40,19 @@ def privacy(request: Request, user=Depends(auth.current_user)):
 @router.post("/auth/request", response_class=HTMLResponse)
 def request_link(request: Request, email: str = Form(...), db: Session = Depends(get_db)):
     settings = get_settings()
+    if not settings.email_enabled and not settings.dev_mode:
+        # Without a provider the link could only be logged, and nobody could
+        # use it, so fail clearly rather than pretend an email was sent.
+        logging.getLogger("pool_tracking.auth").error(
+            "Login requested but no email provider is configured "
+            "(set RESEND_API_KEY or SMTP_HOST, or DEV_MODE=true locally)"
+        )
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": "Email sign-in isn't configured on this server."},
+            status_code=503,
+        )
     try:
         link = auth.issue_magic_link(db, email)
     except RuntimeError:
@@ -51,10 +64,10 @@ def request_link(request: Request, email: str = Form(...), db: Session = Depends
             {"error": "We couldn't send the login email just now. Please try again shortly."},
             status_code=502,
         )
-    # In console mode (no provider), surface the link so the app is usable without mail.
-    # link is None for addresses outside ALLOWED_EMAILS; we still show the same page
-    # so the form can't be used to probe which addresses are accepted.
-    dev_link = None if settings.email_enabled else link
+    # In local dev mode with no provider, surface the link so the app is usable
+    # without mail. link is None for addresses outside ALLOWED_EMAILS; we still
+    # show the same page so the form can't be used to probe which are accepted.
+    dev_link = link if settings.dev_mode and not settings.email_enabled else None
     return templates.TemplateResponse(
         request,
         "login_sent.html",
@@ -77,6 +90,6 @@ def verify(request: Request, token: str, db: Session = Depends(get_db)):
 
 
 @router.get("/logout")
-def logout(request: Request):
-    auth.logout_session(request)
+def logout(request: Request, db: Session = Depends(get_db)):
+    auth.logout_session(request, db)
     return RedirectResponse("/login", status_code=303)

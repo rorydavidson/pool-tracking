@@ -15,6 +15,7 @@ from .models import MagicToken, User
 from .security import generate_token, hash_token
 
 SESSION_USER_KEY = "user_id"
+SESSION_VERSION_KEY = "sv"
 logger = logging.getLogger("pool_tracking.auth")
 
 
@@ -82,10 +83,21 @@ def consume_magic_link(db: Session, token: str) -> User | None:
 
 def login_session(request: Request, user: User) -> None:
     request.session[SESSION_USER_KEY] = user.id
+    request.session[SESSION_VERSION_KEY] = user.session_version or 0
 
 
-def logout_session(request: Request) -> None:
-    request.session.pop(SESSION_USER_KEY, None)
+def logout_session(request: Request, db: Session) -> None:
+    """Clear this cookie and revoke every other session the user holds.
+
+    Sessions are signed cookies, so clearing one in the browser doesn't stop a
+    copied cookie from working; bumping the stored version does.
+    """
+    user_id = request.session.get(SESSION_USER_KEY)
+    user = db.get(User, user_id) if user_id else None
+    if user is not None:
+        user.session_version = (user.session_version or 0) + 1
+        db.commit()
+    request.session.clear()
 
 
 def current_user(request: Request, db: Session = Depends(get_db)) -> User | None:
@@ -94,6 +106,13 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User | None
     if not user_id:
         return None
     user = db.get(User, user_id)
+    # Cookies from before a logout (or issued before versioning existed) are
+    # no longer valid.
+    if user is not None and request.session.get(SESSION_VERSION_KEY) != (
+        user.session_version or 0
+    ):
+        request.session.clear()
+        return None
     # Accounts created before the allowlist was set (or later removed from it)
     # lose access immediately rather than when their session cookie expires.
     if user is not None and not get_settings().is_email_allowed(user.email):

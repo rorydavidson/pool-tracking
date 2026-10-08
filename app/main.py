@@ -17,6 +17,9 @@ from .routes import auth_routes, integrations, pools
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 settings = get_settings()
+_problems = settings.startup_problems()
+if _problems:
+    raise RuntimeError("Refusing to start: " + " ".join(_problems))
 
 app = FastAPI(title="Pool Tracking", version=__version__)
 
@@ -26,7 +29,7 @@ app.add_middleware(
     secret_key=settings.app_secret,
     max_age=settings.session_ttl_days * 24 * 3600,
     same_site="lax",
-    https_only=False,  # set True behind HTTPS in production
+    https_only=settings.session_cookie_secure,
 )
 
 _static_dir = Path(__file__).parent / "static"

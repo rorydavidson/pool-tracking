@@ -51,6 +51,9 @@ _LIGHTWEIGHT_MIGRATIONS = {
         "image_path": "VARCHAR(255)",
         "winter_mode": "BOOLEAN DEFAULT 0",
     },
+    "users": {
+        "session_version": "INTEGER DEFAULT 0",
+    },
     "readings": {
         "ec": "FLOAT",
         "image_path": "VARCHAR(255)",
