@@ -332,3 +332,10 @@ def test_poollab_connect_and_sync(logged_in_client, monkeypatch):
         "/integrations/poollab/sync", data={"pool_id": pool_id}, follow_redirects=False
     )
     assert "Synced 0" in again.headers["location"].replace("%20", " ")
+
+
+def test_stylesheet_url_is_versioned(client):
+    import re
+
+    page = client.get("/login").text
+    assert re.search(r'/static/style\.css\?v=[0-9a-f]{10}"', page)
