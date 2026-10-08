@@ -50,16 +50,18 @@
 {% endmacro %}
 
 {% block content %}
-<section class="hero {{ 'has-photo' if pool.image_path else 'no-photo' }}"
+<section class="hero {{ 'has-photo' if pool.image_path else 'no-photo' }}{{ ' winter' if pool.winter_mode }}"
   {% if pool.image_path %}style="background-image:linear-gradient(to top, rgba(8,40,48,0.82) 0%, rgba(8,40,48,0.15) 55%, rgba(8,40,48,0.05) 100%), url('/pools/{{ pool.id }}/image')"{% endif %}>
   <div class="hero-body">
+    {% if pool.winter_mode %}
+      <p class="winter-badge" role="status"><span aria-hidden="true">❄</span> Winter mode · pool closed</p>
+    {% endif %}
     <h1>{{ pool.name }}</h1>
     <div class="chips">
       <span class="chip">{{ "%.0f"|format(pool.volume_litres) }} L</span>
       <span class="chip">{{ pool.sanitizer.value }}</span>
       <span class="chip">{{ pool.surface.value }}</span>
       <span class="chip">{{ "indoor" if pool.indoor else "outdoor" }}</span>
-      {% if pool.winter_mode %}<span class="chip">❄ winter mode</span>{% endif %}
       {% if pool.pool_type %}<span class="chip">{{ pool.pool_type.value.replace("_", "-") }}</span>{% endif %}
       {% if pool.shape %}<span class="chip">{{ pool.shape.value }}</span>{% endif %}
       {% if pool.length_m and pool.avg_depth_m %}
@@ -183,6 +185,9 @@
       </form>
     </header>
     <div class="panel-body">
+      {% if pool.winter_mode %}
+        <p class="winter-note"><span aria-hidden="true">❄</span> Advice is tailored for a closed pool: protecting the water and surface until it reopens, not swim-ready levels.</p>
+      {% endif %}
       {% if assessment.summary %}<p class="advice-summary">{{ assessment.summary }}</p>{% endif %}
 
       <div class="rec-grid">

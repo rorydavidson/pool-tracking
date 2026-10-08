@@ -1070,6 +1070,7 @@ async def update_pool(
     pool.sanitizer = SanitizerType(sanitizer)
     pool.surface = SurfaceType(surface)
     pool.indoor = indoor
+    winter_changed = bool(pool.winter_mode) != winter_mode
     pool.winter_mode = winter_mode
     pool.pool_type = _enum_or_none(PoolType, pool_type)
     pool.shape = _enum_or_none(PoolShape, shape)
@@ -1092,6 +1093,10 @@ async def update_pool(
         return RedirectResponse(f"/pools/{pool.id}?error={error}", status_code=303)
 
     db.commit()
+    if winter_changed:
+        # Stored advice was written for the old mode; replace it so the page
+        # doesn't show swim-season advice for a closed pool (or vice versa).
+        _regenerate_advice(db, pool)
     return RedirectResponse(f"/pools/{pool.id}?flash=Details updated", status_code=303)
 
 
